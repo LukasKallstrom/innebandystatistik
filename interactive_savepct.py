@@ -1,0 +1,247 @@
+"""Generate an interactive goalie save-percentage timeline."""
+from __future__ import annotations
+
+import argparse
+import logging
+from pathlib import Path
+from typing import Tuple
+
+import pandas as pd
+import requests
+
+logger = logging.getLogger(__name__)
+
+
+try:  # pragma: no cover - optional dependency
+    import plotly.express as px
+except ImportError as exc:  # pragma: no cover - optional dependency
+    raise SystemExit(
+        "plotly is required for the interactive visualisation. Install it via 'pip install plotly'."
+    ) from exc
+
+
+try:  # pragma: no cover - imported lazily to avoid circular CLI execution
+    from main import (
+        Appearance,
+        Game,
+        DEFAULT_FIXTURE_URL,
+        appearances_to_frame,
+        build_session,
+        fetch_html,
+        games_to_frame,
+        iter_game_links,
+        parse_game,
+    )
+except ImportError as exc:  # pragma: no cover - make failure obvious to the user
+    raise SystemExit("This script must be executed from the project root.") from exc
+
+
+def scrape_data(season_url: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Scrape *season_url* and return dataframes for games and goalie appearances."""
+
+    session = build_session()
+    logger.info("Fetching fixture list: %s", season_url)
+    fixture_doc = fetch_html(session, season_url)
+    game_links = sorted(set(iter_game_links(fixture_doc, season_url)))
+    logger.info("Discovered %d unique games", len(game_links))
+
+    games: list[Game] = []
+    appearances: list[Appearance] = []
+    for index, url in enumerate(game_links, start=1):
+        logger.debug("Fetching game %d/%d: %s", index, len(game_links), url)
+        try:
+            game_doc = fetch_html(session, url)
+        except requests.RequestException as exc:  # pragma: no cover - network variability
+            logger.warning("Failed to fetch %s: %s", url, exc)
+            continue
+        game, game_appearances = parse_game(game_doc, url)
+        games.append(game)
+        appearances.extend(game_appearances)
+
+    if not games:
+        raise SystemExit("No games detected. Check that the fixture URL is correct.")
+
+    return games_to_frame(games), appearances_to_frame(appearances)
+
+
+def load_from_excel(path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Load games and appearances from an Excel workbook created by main.py."""
+
+    logger.info("Loading data from %s", path)
+    with pd.ExcelFile(path) as workbook:
+        games = pd.read_excel(workbook, "games")
+        appearances = pd.read_excel(workbook, "appearances")
+    return games, appearances
+
+
+def prepare_cumulative_save_percentages(
+    games: pd.DataFrame, appearances: pd.DataFrame
+) -> pd.DataFrame:
+    """Return a dataframe with cumulative save percentages per goalie over time."""
+
+    if games.empty or appearances.empty:
+        raise ValueError("Games and appearances data must not be empty")
+
+    required_columns = {"game_id", "goalie"}
+    missing_required = required_columns.difference(appearances.columns)
+    if missing_required:
+        missing_list = ", ".join(sorted(missing_required))
+        raise ValueError(f"Missing required appearance columns: {missing_list}")
+
+    value_columns = {"saves", "shots_against", "goals_against"}
+    available_values = value_columns.intersection(appearances.columns)
+    if not available_values.intersection({"saves", "shots_against"}):
+        raise ValueError(
+            "Appearances data requires at least 'saves' or 'shots_against' columns."
+        )
+
+    merged = appearances.merge(
+        games[["game_id", "date"]], on="game_id", how="left", validate="many_to_one"
+    )
+
+    for column in value_columns:
+        if column not in merged:
+            merged[column] = pd.NA
+
+    # Normalise numeric columns in case they were stored as strings in Excel.
+    for column in value_columns:
+        if column in merged:
+            merged[column] = pd.to_numeric(merged[column], errors="coerce")
+
+    # Reconstruct missing values where possible. Some older exports omit
+    # ``shots_against`` but include ``saves`` and ``goals_against``.
+    if {"saves", "goals_against", "shots_against"}.issubset(merged.columns):
+        missing_shots = merged["shots_against"].isna() & merged["saves"].notna()
+        merged.loc[missing_shots, "shots_against"] = (
+            merged.loc[missing_shots, "saves"] + merged.loc[missing_shots, "goals_against"].fillna(0)
+        )
+
+    if {"shots_against", "goals_against", "saves"}.issubset(merged.columns):
+        missing_saves = merged["saves"].isna() & merged["shots_against"].notna()
+        merged.loc[missing_saves, "saves"] = (
+            merged.loc[missing_saves, "shots_against"] - merged.loc[missing_saves, "goals_against"].fillna(0)
+        )
+
+    merged = merged.dropna(subset=["date", "goalie", "saves", "shots_against"])
+
+    if merged.empty:
+        raise ValueError(
+            "Insufficient goalie data with saves and shots. Ensure the Excel file"
+            " was generated by main.py and contains goalie appearances."
+        )
+
+    merged["date"] = pd.to_datetime(merged["date"])
+    merged = merged.sort_values(["date", "game_id"])
+
+    cumulative = merged.copy()
+    cumulative["cumulative_saves"] = cumulative.groupby("goalie")["saves"].cumsum()
+    cumulative["cumulative_shots"] = cumulative.groupby("goalie")["shots_against"].cumsum()
+
+    positive_shots = cumulative["cumulative_shots"] > 0
+    if not positive_shots.any():
+        raise ValueError(
+            "All goalie appearances have zero shots against; cannot compute save percentages."
+        )
+
+    cumulative = cumulative[positive_shots]
+    cumulative["cumulative_save_pct"] = (
+        cumulative["cumulative_saves"] / cumulative["cumulative_shots"]
+    )
+    cumulative["team"] = cumulative["team"].fillna("Unknown")
+
+    return cumulative
+
+
+def build_figure(cumulative: pd.DataFrame):
+    """Create the interactive plotly figure from the cumulative dataframe."""
+
+    fig = px.line(
+        cumulative,
+        x="date",
+        y="cumulative_save_pct",
+        color="goalie",
+        line_group="goalie",
+        markers=True,
+        hover_data={
+            "team": True,
+            "game_id": True,
+            "cumulative_saves": True,
+            "cumulative_shots": True,
+            "cumulative_save_pct": ":.1%",
+        },
+        labels={
+            "date": "Date",
+            "cumulative_save_pct": "Cumulative Save %",
+            "goalie": "Goalie",
+        },
+    )
+
+    fig.update_layout(
+        title="Goalie cumulative save percentage over time",
+        hovermode="x unified",
+        xaxis=dict(rangeslider=dict(visible=True)),
+        yaxis=dict(tickformat=".0%", rangemode="tozero"),
+        legend_title_text="Goalie",
+    )
+    return fig
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Build an interactive timeline showing how goalies' total save percentages "
+            "develop throughout the season."
+        )
+    )
+    parser.add_argument(
+        "--excel",
+        type=Path,
+        help=(
+            "Existing Excel workbook produced by main.py. If omitted, data is scraped "
+            "from --season-url."
+        ),
+    )
+    parser.add_argument(
+        "--season-url",
+        default=DEFAULT_FIXTURE_URL,
+        help="Fixture list to scrape when no Excel workbook is supplied.",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("goalie_savepct_interactive.html"),
+        help="Destination HTML file for the interactive plot.",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable verbose logging to follow progress.",
+    )
+
+    args = parser.parse_args()
+
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+    if args.excel:
+        if not args.excel.exists():
+            raise SystemExit(f"The Excel file {args.excel} does not exist.")
+        games_df, appearances_df = load_from_excel(args.excel)
+    else:
+        games_df, appearances_df = scrape_data(args.season_url)
+
+    cumulative = prepare_cumulative_save_percentages(games_df, appearances_df)
+    if cumulative.empty:
+        raise SystemExit("No cumulative save-percentage data available to plot.")
+
+    figure = build_figure(cumulative)
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    figure.write_html(args.output, include_plotlyjs="cdn")
+    logger.info("Interactive plot written to %s", args.output.resolve())
+
+
+if __name__ == "__main__":
+    main()
