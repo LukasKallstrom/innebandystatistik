@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -31,6 +32,8 @@ from urllib.parse import urljoin, urlparse
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
+
+logger = logging.getLogger(__name__)
 
 # -------------------------
 # Configuration defaults
@@ -373,13 +376,13 @@ def create_plot(appearances: Iterable[Appearance], output_path: Path) -> None:
     try:
         import matplotlib.pyplot as plt
     except ImportError:  # pragma: no cover - optional dependency
-        print("matplotlib not installed; skipping plot generation")
+        logger.info("matplotlib not installed; skipping plot generation")
         return
 
     df = appearances_to_frame(appearances)
     df = df.dropna(subset=["save_pct", "goalie", "game_id"])
     if df.empty:
-        print("No save percentage data found; skipping plot generation")
+        logger.info("No save percentage data found; skipping plot generation")
         return
     pivot = df.pivot_table(
         index="game_id",
@@ -421,34 +424,62 @@ def main() -> None:
         default=DEFAULT_PLOT,
         help="Optional save-percentage plot (PNG).",
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable debug logging for detailed progress information.",
+    )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress informational output, showing only warnings and errors.",
+    )
 
     args = parser.parse_args()
 
+    if args.verbose and args.quiet:
+        parser.error("--verbose and --quiet are mutually exclusive")
+
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.WARNING if args.quiet else logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
     session = build_session()
+    logger.info("Fetching fixture list: %s", args.season_url)
     fixture_doc = fetch_html(session, args.season_url)
     game_links = sorted(set(iter_game_links(fixture_doc, args.season_url)))
+    logger.info("Found %d unique game links", len(game_links))
 
     games: List[Game] = []
     appearances: List[Appearance] = []
-    for url in game_links:
+    total_games = len(game_links)
+    for idx, url in enumerate(game_links, start=1):
+        logger.info("Fetching game %d/%d: %s", idx, total_games, url)
         try:
             game_doc = fetch_html(session, url)
         except requests.RequestException as exc:  # pragma: no cover - network failure
-            print(f"Failed to fetch {url}: {exc}")
+            logger.warning("Failed to fetch %s: %s", url, exc)
             continue
         game, game_appearances = parse_game(game_doc, url)
         games.append(game)
         appearances.extend(game_appearances)
+        logger.debug(
+            "Parsed %d goalie appearances from %s",
+            len(game_appearances),
+            url,
+        )
 
     if not games:
         raise SystemExit("No games found; verify the fixture URL.")
 
     write_excel(games, appearances, args.output)
-    print(f"Wrote {args.output.resolve()}")
+    logger.info("Wrote %s", args.output.resolve())
 
     with contextlib.suppress(Exception):
         create_plot(appearances, args.plot)
-        print(f"Created {args.plot.resolve()}")
+        logger.info("Created %s", args.plot.resolve())
 
 
 if __name__ == "__main__":
