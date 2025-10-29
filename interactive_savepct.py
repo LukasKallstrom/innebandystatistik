@@ -136,7 +136,14 @@ def prepare_cumulative_save_percentages(
     cumulative = merged.copy()
     cumulative["cumulative_saves"] = cumulative.groupby("goalie")["saves"].cumsum()
     cumulative["cumulative_shots"] = cumulative.groupby("goalie")["shots_against"].cumsum()
-    cumulative = cumulative[cumulative["cumulative_shots"] > 0]
+
+    positive_shots = cumulative["cumulative_shots"] > 0
+    if not positive_shots.any():
+        raise ValueError(
+            "All goalie appearances have zero shots against; cannot compute save percentages."
+        )
+
+    cumulative = cumulative[positive_shots]
     cumulative["cumulative_save_pct"] = (
         cumulative["cumulative_saves"] / cumulative["cumulative_shots"]
     )
