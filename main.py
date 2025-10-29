@@ -1,143 +1,81 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+"""Simple floorball goalie stats scraper.
+
+This script downloads the fixture list from statistik.innebandy.se, follows each
+match link, extracts goalie appearance statistics, and stores the result in an
+Excel workbook.  The implementation purposely avoids advanced dependencies so
+it stays easy to run on macOS or any other platform with Python 3.10+
+installed.
+
+The output workbook contains one sheet with normalized goalie appearances and a
+second sheet summarising per-game metadata.  A small helper function also
+creates a save-percentage timeline plot for each goalie using matplotlib if it
+is available on the machine.
+
+Usage
+-----
+python main.py --season-url <fixture url> --output goalie_stats.xlsx
+
+If no arguments are provided the script uses a reasonable default fixture list.
 """
-Floorball Goalie Save-Percentage Scraper & Grapher
-
-What this program does:
-1) Scrapes the fixture list at statistik.innebandy.se for all game links.
-2) Visits each game page and extracts goalie appearance stats (per goalie, per team),
-   including cases where a team swaps goalies mid-game.
-3) Stores normalized data into a SQLite database:
-   - games (one row per game)
-   - goalies (unique goalie identities)
-   - appearances (one row per goalie appearance per game)
-4) Builds a timeline graph of save percentage by goalie over the season.
-
-Key design notes:
-- Robust against transient network errors (retries, backoff, timeouts).
-- Parallelized fetching for speed (ThreadPoolExecutor with a guarded session).
-- Optional HTTP caching (requests-cache) to accelerate repeated runs.
-- Extensive comments to explain the logic.
-- Defensive parsing: multiple CSS/XPath selectors tried in priority order.
-- Edge-case handling: division by zero, missing stats, partial data, swapped goalies.
-
-Author: (you)
-"""
-
 from __future__ import annotations
 
-import re
-import sys
-import time
-import math
-import json
-import sqlite3
+import argparse
+import contextlib
 import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Iterable, List, Optional, Tuple
-from urllib.parse import urljoin, urlparse, parse_qs
+from pathlib import Path
+from typing import Iterable, Iterator, List, Optional
+from urllib.parse import urljoin, urlparse
 
-import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
-
-try:
-    import requests_cache  # Optional but recommended
-except Exception:
-    requests_cache = None  # Graceful fallback if not installed
-
-from bs4 import BeautifulSoup
 import pandas as pd
-import matplotlib.pyplot as plt
-from matplotlib.ticker import PercentFormatter
-from dateutil import parser as dateparser
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from tqdm import tqdm
+import requests
+from bs4 import BeautifulSoup
 
-# ----------------------------
-# Configuration (edit if needed)
-# ----------------------------
+logger = logging.getLogger(__name__)
 
-FIXTURE_URL = "http://statistik.innebandy.se/ft.aspx?scr=fixturelist&ftid=40701"
+# -------------------------
+# Configuration defaults
+# -------------------------
 
-# Maximum concurrent game fetches – tune up/down depending on your connection & site tolerance
-MAX_WORKERS = 10
+DEFAULT_FIXTURE_URL = (
+    "https://statistik.innebandy.se/ft.aspx?scr=fixturelist&ftid=40701"
+)
+DEFAULT_OUTPUT = Path("goalie_stats.xlsx")
+DEFAULT_PLOT = Path("goalie_savepct_timeline.png")
 
-# HTTP timeouts
-CONNECT_TIMEOUT = 10
-READ_TIMEOUT = 20
-
-# If the figure would contain too many lines, you *can* cap it for readability.
-# To strictly include all goalies, set MAX_GOALIES_IN_GRAPH = None
-MAX_GOALIES_IN_GRAPH: Optional[int] = None  # e.g., 40
-
-# Output figure path
-OUTPUT_FIG = "goalie_savepct_timeline.png"
-
-# SQLite DB file
-DB_PATH = "floorball_goalies.sqlite3"
-
-# Log level: DEBUG for more detail, INFO for normal, WARNING to reduce chatter
-LOG_LEVEL = logging.INFO
-
-# Known selectors/patterns used to locate elements on pages.
-# If the site changes, tweak these first (kept together for maintainability).
-KNOWN_SELECTORS = {
-    # Fixture list page: find all links to individual game pages
-    # We look for anchors likely pointing to game result/details:
-    "game_link_hrefs_contains": [
-        "scr=game",        # generic guess
-        "scr=result",      # typical result page
-        "GameID=",         # some backends use GameID
-        "fmid=",           # innebandy often uses fmid
-        "matchid=",        # alternate
-        "gameguid=",       # alternate
-    ],
-    # On the game page: team & date meta
-    "game_date_selectors": [
-        "div.gameHeader .date",          # hypothetical
-        "div#gameheader .date",
-        "span#ctl00_PlaceHolderMain_lblMatchDate",  # ASP.NET style
-        "div#matchDate",
-        "td:contains('Spelades')",       # Swedish pages sometimes have this text
-    ],
-    "home_team_selectors": [
-        "div.gameHeader .homeTeam",
-        "span#ctl00_PlaceHolderMain_lblHomeTeam",
-        "div#homeTeam",
-        "td.homeTeamName",
-    ],
-    "away_team_selectors": [
-        "div.gameHeader .awayTeam",
-        "span#ctl00_PlaceHolderMain_lblAwayTeam",
-        "div#awayTeam",
-        "td.awayTeamName",
-    ],
-    # Goalie tables usually labeled with words like "Goalkeepers" / "Målvakter".
-    # We use headings + following tables or direct table IDs.
-    "goalie_section_head_regex": r"(Goal(keeper|ie)s?|Målvakter|M\u00E5lvakter)",
-    "goalie_table_selectors": [
-        # Known common patterns (IDs/classes often ASP.NET generated, so we search widely)
-        "table.goalkeepers",
-        "table#goalkeepers",
-        "table:contains('Målvakter')",
-        "table:contains('Goalkeepers')",
-    ],
-}
-
-# Fallback patterns for extracting a "game id" from a URL reliably enough for a unique key.
-KNOWN_GAME_PATTERNS = [
-    r"[?&](?:GameID|gameId|gameid)=(?P<id>[A-Za-z0-9\-]+)",
-    r"[?&](?:fmid|FMID)=(?P<id>[A-Za-z0-9\-]+)",
-    r"[?&](?:matchid|MatchId)=(?P<id>[A-Za-z0-9\-]+)",
-    r"[?&](?:gameguid|GameGuid)=(?P<id>[A-Za-z0-9\-]+)",
+# Patterns that help the parser navigate pages that vary slightly each season.
+GOALIE_HEADER = re.compile(r"(Goal(ie|keeper)s?|Målvakter)", re.I)
+TEAM_SELECTORS = [
+    "span#ctl00_PlaceHolderMain_lblHomeTeam",
+    "div.gameHeader .homeTeam",
+    "div#homeTeam",
+    "td.homeTeamName",
+]
+AWAY_SELECTORS = [
+    "span#ctl00_PlaceHolderMain_lblAwayTeam",
+    "div.gameHeader .awayTeam",
+    "div#awayTeam",
+    "td.awayTeamName",
+]
+DATE_SELECTORS = [
+    "span#ctl00_PlaceHolderMain_lblMatchDate",
+    "div.gameHeader .date",
+    "div#matchDate",
+    "td:contains('Spelades')",
+]
+GAME_LINK_KEYWORDS = ["scr=game", "scr=result", "matchid=", "fmid=", "gameid="]
+GAME_ID_PATTERNS = [
+    re.compile(pat, re.I)
+    for pat in (
+        r"[?&](?:GameID|gameId|gameid)=(?P<id>[A-Za-z0-9\-]+)",
+        r"[?&](?:fmid|FMID)=(?P<id>[A-Za-z0-9\-]+)",
+        r"[?&](?:matchid|MatchId)=(?P<id>[A-Za-z0-9\-]+)",
+        r"[?&](?:gameguid|GameGuid)=(?P<id>[A-Za-z0-9\-]+)",
+    )
 ]
 
-
-# ----------------------------
-# Data models
-# ----------------------------
 
 @dataclass
 class Game:
@@ -152,702 +90,397 @@ class Game:
 class Appearance:
     game_id: str
     goalie_name: str
-    team_name: str
-    # Basic stat lines
+    team_name: Optional[str]
     saves: Optional[int]
     shots_against: Optional[int]
     goals_against: Optional[int]
-    save_pct: Optional[float]   # 0..1
-    toi_seconds: Optional[int]  # time on ice in seconds; None if unknown
+    save_pct: Optional[float]
+    time_on_ice_seconds: Optional[int]
 
 
-# ----------------------------
-# Logging setup
-# ----------------------------
-
-logging.basicConfig(
-    level=LOG_LEVEL,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%H:%M:%S"
-)
-logger = logging.getLogger(__name__)
-
-
-# ----------------------------
-# HTTP session with retries & (optional) cache
-# ----------------------------
+# -------------------------
+# HTTP helpers
+# -------------------------
 
 def build_session() -> requests.Session:
-    """
-    Build a hardened requests Session with:
-      - optional caching (requests-cache) to accelerate repeated runs,
-      - retry-with-backoff for transient errors,
-      - a reasonable timeout strategy.
-    """
-    if requests_cache is not None:
-        # Cache for 12 hours by default (tweak as needed)
-        requests_cache.install_cache("floorball_cache", expire_after=12 * 3600)
+    """Return a basic requests session with a sensible user agent."""
 
     session = requests.Session()
-
-    retry = Retry(
-        total=5,
-        backoff_factor=0.6,
-        status_forcelist=[429, 500, 502, 503, 504],
-        allowed_methods=["GET", "HEAD", "OPTIONS"]
+    session.headers.update(
+        {
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0 Safari/537.36"
+            )
+        }
     )
-    adapter = HTTPAdapter(max_retries=retry, pool_connections=50, pool_maxsize=50)
-    session.mount("http://", adapter)
-    session.mount("https://", adapter)
-
-    # A sensible desktop UA reduces the chance of anti-bot blocks
-    session.headers.update({
-        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) "
-                      "AppleWebKit/537.36 (KHTML, like Gecko) "
-                      "Chrome/124.0 Safari/537.36"
-    })
     return session
 
 
-# ----------------------------
-# Utilities
-# ----------------------------
+def fetch_html(session: requests.Session, url: str) -> BeautifulSoup:
+    """Fetch *url* and return a parsed BeautifulSoup document."""
 
-def fetch_html(session: requests.Session, url: str) -> Optional[BeautifulSoup]:
-    """
-    Fetch a URL and return a BeautifulSoup document or None on hard failure.
-    """
-    try:
-        r = session.get(url, timeout=(CONNECT_TIMEOUT, READ_TIMEOUT))
-        r.raise_for_status()
-        return BeautifulSoup(r.text, "lxml")
-    except requests.RequestException as e:
-        logger.warning("Fetch failed for %s: %s", url, e)
-        return None
+    response = session.get(url, timeout=20)
+    response.raise_for_status()
+    return BeautifulSoup(response.text, "lxml")
 
 
-def parse_game_id_from_url(url: str) -> str:
-    """
-    Heuristically extract a unique game id from a game URL, using known patterns.
-    If nothing found, fall back to a normalized version of the path+query.
-    """
-    for pat in KNOWN_GAME_PATTERNS:
-        m = re.search(pat, url, flags=re.I)
-        if m:
-            return m.group("id")
-    # Fallback: sanitize the last path + query
+# -------------------------
+# Parsing helpers
+# -------------------------
+
+def iter_game_links(doc: BeautifulSoup, base_url: str) -> Iterator[str]:
+    """Yield absolute URLs to game pages found in the fixture list."""
+
+    for anchor in doc.find_all("a", href=True):
+        href = anchor["href"].strip()
+        if not href:
+            continue
+        if any(keyword in href.lower() for keyword in GAME_LINK_KEYWORDS):
+            yield urljoin(base_url, href)
+
+
+def parse_game_id(url: str) -> str:
+    """Return a stable identifier derived from *url*."""
+
+    for pattern in GAME_ID_PATTERNS:
+        match = pattern.search(url)
+        if match:
+            return match.group("id")
     parsed = urlparse(url)
-    raw = (parsed.path or "") + "?" + (parsed.query or "")
-    raw = re.sub(r"[^A-Za-z0-9]+", "_", raw).strip("_")
-    return raw[-100:]  # keep final portion
+    candidate = f"{parsed.path}?{parsed.query}".strip("?")
+    cleaned = re.sub(r"[^A-Za-z0-9]+", "_", candidate).strip("_")
+    return cleaned[-80:] or "unknown_game"
 
 
-def text_or_none(el) -> Optional[str]:
-    """
-    Extract text from a BeautifulSoup element safely.
-    """
-    if not el:
+def first_text(doc: BeautifulSoup, selectors: Iterable[str]) -> Optional[str]:
+    """Return the stripped text of the first matching CSS selector."""
+
+    for selector in selectors:
+        element = doc.select_one(selector)
+        if element:
+            text = element.get_text(strip=True)
+            if text:
+                return text
+    return None
+
+
+def parse_date(raw: Optional[str]) -> Optional[datetime]:
+    if not raw:
         return None
-    txt = el.get_text(strip=True)
-    return txt or None
+    for fmt in ("%Y-%m-%d", "%Y-%m-%d %H:%M", "%d %B %Y", "%Y-%m-%d %H:%M:%S"):
+        with contextlib.suppress(ValueError):
+            return datetime.strptime(raw, fmt)
+    # dateutil offers better coverage but is an optional dependency, so only
+    # import it when we truly need to.
+    with contextlib.suppress(ImportError, ValueError):
+        from dateutil import parser as date_parser
+
+        return date_parser.parse(raw)
+    return None
 
 
-def time_str_to_seconds(s: Optional[str]) -> Optional[int]:
-    """
-    Convert a time string like "59:43" to seconds. Returns None if unknown or malformed.
-    """
-    if not s:
+def time_to_seconds(raw: str | None) -> Optional[int]:
+    if not raw:
         return None
-    s = s.strip()
-    # Handle formats like "59:43" or "1:02:33"
-    parts = s.split(":")
+    parts = raw.strip().split(":")
     try:
         if len(parts) == 2:
-            m, sec = int(parts[0]), int(parts[1])
-            return m * 60 + sec
-        elif len(parts) == 3:
-            h, m, sec = int(parts[0]), int(parts[1]), int(parts[2])
-            return h * 3600 + m * 60 + sec
+            minutes, seconds = map(int, parts)
+            return minutes * 60 + seconds
+        if len(parts) == 3:
+            hours, minutes, seconds = map(int, parts)
+            return hours * 3600 + minutes * 60 + seconds
     except ValueError:
         return None
     return None
 
 
-def safe_int(s: Optional[str]) -> Optional[int]:
-    """
-    Convert text to int if possible (handles '—', '-', '' as None).
-    """
-    if s is None:
+def as_int(raw: str | None) -> Optional[int]:
+    if raw is None:
         return None
-    s = s.strip().replace("\u2212", "-")  # minus symbol fix if present
-    if s in {"", "-", "—"}:
+    raw = raw.strip().replace("\u2212", "-")
+    if raw in {"", "-", "—"}:
         return None
-    try:
-        return int(s)
-    except ValueError:
-        # Sometimes we get "12/15" like "saves/shots"
-        m = re.match(r"^\s*(\d+)\s*/\s*(\d+)\s*$", s)
-        if m:
-            return int(m.group(1))  # caller must handle second part separately
-        return None
-
-
-def compute_save_pct(saves: Optional[int], shots_against: Optional[int]) -> Optional[float]:
-    """
-    Compute save percentage (0..1) safely. Returns None if not computable.
-    """
-    if saves is None and shots_against is None:
-        return None
-    if shots_against is None:
-        # If shots unknown but goals known, we can't derive.
-        return None
-    if shots_against == 0:
-        # Define 100% if zero shots faced and no goals against; else 0% if goals recorded.
-        if saves is None:
-            return 1.0  # Assume perfect if no shots (common in very short TOI) – adjustable decision.
-        return 1.0 if saves == 0 else (saves / 1.0)  # fallback
-    if saves is None:
-        return None
-    return max(0.0, min(1.0, saves / float(shots_against)))
-
-
-# ----------------------------
-# Parsing functions (fixture & game pages)
-# ----------------------------
-
-def find_game_links(doc: BeautifulSoup, base_url: str) -> List[str]:
-    """
-    Extract candidate game links from a fixture list page.
-    Uses a tolerant approach: collects anchors whose href contains any of a known set of substrings.
-    """
-    links = []
-    for a in doc.find_all("a", href=True):
-        href = a["href"]
-        low = href.lower()
-        if any(key in low for key in KNOWN_SELECTORS["game_link_hrefs_contains"]):
-            full = urljoin(base_url, href)
-            links.append(full)
-    # Deduplicate while preserving order
-    seen = set()
-    unique = []
-    for url in links:
-        if url not in seen:
-            unique.append(url)
-            seen.add(url)
-    return unique
-
-
-def extract_text_via_selectors(doc: BeautifulSoup, selectors: List[str]) -> Optional[str]:
-    """
-    Try a set of CSS selectors (and pseudo-selectors) to pull out text.
-    Recognizes ':contains("text")' by scanning for tags containing a substring.
-    """
-    for sel in selectors:
-        if ":contains(" in sel:
-            # Handle custom contains selector: tag:contains('literal')
-            m = re.match(r"^\s*([a-zA-Z0-9\#\.\-:_]+)\s*:\s*contains\(\s*'([^']+)'\s*\)\s*$", sel)
-            if m:
-                tag_query, literal = m.group(1), m.group(2)
-                for el in doc.select(tag_query):
-                    if el and literal in el.get_text(" ", strip=True):
-                        txt = el.get_text(" ", strip=True)
-                        if txt:
-                            return txt
-            continue
-        elements = doc.select(sel)
-        if elements:
-            txt = text_or_none(elements[0])
-            if txt:
-                return txt
+    with contextlib.suppress(ValueError):
+        return int(raw)
+    ratio = re.match(r"^(\d+)\s*/\s*(\d+)$", raw)
+    if ratio:
+        return int(ratio.group(1))
     return None
 
 
-def parse_game_meta(doc: BeautifulSoup) -> Tuple[Optional[str], Optional[str], Optional[datetime]]:
-    """
-    Try to parse home team, away team, and date from a game page.
-    Returns (home_team, away_team, date_dt)
-    """
-    home = extract_text_via_selectors(doc, KNOWN_SELECTORS["home_team_selectors"])
-    away = extract_text_via_selectors(doc, KNOWN_SELECTORS["away_team_selectors"])
-    raw_date = extract_text_via_selectors(doc, KNOWN_SELECTORS["game_date_selectors"])
-
-    dt = None
-    if raw_date:
-        # The date may include time and words; use dateutil's robust parser
-        try:
-            dt = dateparser.parse(raw_date, dayfirst=True, fuzzy=True)
-        except Exception:
-            dt = None
-    return home, away, dt
+def compute_save_percentage(saves: Optional[int], shots: Optional[int]) -> Optional[float]:
+    if saves is None or shots is None or shots == 0:
+        return None
+    pct = saves / float(shots)
+    return max(0.0, min(1.0, pct))
 
 
-def find_goalie_tables(doc: BeautifulSoup) -> List[BeautifulSoup]:
-    """
-    Locate tables that likely contain goalie stats. Strategy:
-      1) Look for headings matching "Goalkeepers"/"Målvakter", and take the next table(s).
-      2) Fall back to tables with known ids/classes.
-    Returns a list of BS4 <table> elements.
-    """
+def extract_goalie_tables(doc: BeautifulSoup) -> List[BeautifulSoup]:
     tables: List[BeautifulSoup] = []
-
-    # 1) Headings then following table
-    head_re = re.compile(KNOWN_SELECTORS["goalie_section_head_regex"], flags=re.I)
-    for heading in doc.find_all(re.compile(r"^h[1-6]$")):
-        if head_re.search(heading.get_text(" ", strip=True)):
-            # Grab the next table sibling(s)
-            nxt = heading.find_next("table")
-            if nxt:
-                tables.append(nxt)
-
-    # 2) Fallback direct selectors
-    for sel in KNOWN_SELECTORS["goalie_table_selectors"]:
-        # Handle ':contains()' pseudo (same helper as above)
-        if ":contains(" in sel:
-            m = re.match(r"^\s*([a-zA-Z0-9\#\.\-:_]+)\s*:\s*contains\(\s*'([^']+)'\s*\)\s*$", sel)
-            if m:
-                tag_query, literal = m.group(1), m.group(2)
-                for tb in doc.select(tag_query):
-                    if tb and literal in tb.get_text(" ", strip=True):
-                        if tb.name.lower() == "table":
-                            tables.append(tb)
-                continue
-        for tb in doc.select(sel):
-            if tb.name.lower() == "table":
-                tables.append(tb)
-
-    # Deduplicate by object id
-    uniq = []
-    seen = set()
-    for t in tables:
-        if id(t) not in seen:
-            uniq.append(t)
-            seen.add(id(t))
-    return uniq
+    for heading in doc.find_all(text=GOALIE_HEADER):
+        table = heading.find_parent()
+        while table and table.name != "table":
+            table = table.find_next("table")
+        if table and table not in tables:
+            tables.append(table)
+    for table in doc.select("table.goalkeepers, table#goalkeepers"):
+        if table not in tables:
+            tables.append(table)
+    return tables
 
 
-def parse_goalie_rows_from_table(tb: BeautifulSoup, team_hint: Optional[str]) -> List[Dict[str, Any]]:
-    """
-    Parse a single goalie table into rows (dicts). This function is defensive because columns differ across sites.
-    We look for any of these data points per row:
-      - Goalie name
-      - Saves
-      - Shots against (aka "shots", "on target", etc.)
-      - Goals against
-      - Save %
-      - Time on ice (TOI)
-    """
-    rows = []
-    headers = [th.get_text(" ", strip=True).lower() for th in tb.select("thead th")] or \
-              [th.get_text(" ", strip=True).lower() for th in tb.select("tr th")]
+def parse_table_headers(table: BeautifulSoup) -> List[str]:
+    header_row = table.find("tr")
+    if not header_row:
+        return []
+    headers = [cell.get_text(strip=True).lower() for cell in header_row.find_all(["th", "td"])]
+    return headers
 
-    # Build column index map by fuzzy matching common header names (multi-language tolerant)
-    def find_idx(words: Iterable[str]) -> Optional[int]:
-        for i, h in enumerate(headers):
-            for w in words:
-                if w in h:
-                    return i
+
+def deduce_team_name(table: BeautifulSoup, default: Optional[str]) -> Optional[str]:
+    caption = table.find("caption")
+    if caption:
+        text = caption.get_text(strip=True)
+        if text:
+            return text
+    preceding = table.find_previous(string=True)
+    if preceding:
+        text = preceding.strip()
+        if text:
+            return text
+    return default
+
+
+def parse_goalie_rows(
+    table: BeautifulSoup, game_id: str, default_team: Optional[str]
+) -> Iterator[Appearance]:
+    headers = parse_table_headers(table)
+    rows = table.find_all("tr")[1:]
+    team_name = deduce_team_name(table, default_team)
+
+    def find_index(*candidates: str) -> Optional[int]:
+        for candidate in candidates:
+            candidate = candidate.lower()
+            with contextlib.suppress(ValueError):
+                return headers.index(candidate)
+        for idx, header in enumerate(headers):
+            for candidate in candidates:
+                if candidate.lower() in header:
+                    return idx
         return None
 
-    idx_name = find_idx(["name", "spelare", "målvakt", "målvakter", "goal", "keeper", "goalkeeper"])
-    idx_saves = find_idx(["saves", "räddningar", "raddningar"])
-    idx_shots = find_idx(["shots", "skott", "on target", "skott mot", "shots against"])
-    idx_ga    = find_idx(["ga", "goals against", "insläppta", "insl\u00E4ppta", "inslapp"])
-    idx_pct   = find_idx(["%", "save %", "sv%", "sv-proc", "sv%"])
-    idx_toi   = find_idx(["toi", "time", "speltid", "minuter", "min", "tid"])
+    name_idx = find_index("spelare", "player", "målvakt", "goalkeeper")
+    shots_idx = find_index("skott", "shots", "sa")
+    goals_idx = find_index("mål", "ga", "insläppta")
+    saves_idx = find_index("räddningar", "saves")
+    time_idx = find_index("tid", "toi")
 
-    # Identify body rows
-    body_rows = tb.select("tbody tr") or tb.select("tr")
-    for tr in body_rows:
-        tds = tr.find_all(["td", "th"])
-        if not tds:
+    for row in rows:
+        cells = [cell.get_text(strip=True) for cell in row.find_all(["td", "th"])]
+        if not cells or (name_idx is not None and not cells[name_idx]):
             continue
-
-        def get_cell(idx: Optional[int]) -> Optional[str]:
-            if idx is None:
-                return None
-            if idx < len(tds):
-                return tds[idx].get_text(" ", strip=True)
-            return None
-
-        name = get_cell(idx_name) or None
-        if not name:
-            # If no name, likely a summary row (e.g., "Team Total"). Skip.
-            continue
-
-        # Extract numeric fields
-        raw_saves = get_cell(idx_saves)
-        raw_shots = get_cell(idx_shots)
-        raw_ga    = get_cell(idx_ga)
-        raw_pct   = get_cell(idx_pct)
-        raw_toi   = get_cell(idx_toi)
-
-        # Try to parse (saves/shots) format like "12/15"
-        saves_val = safe_int(raw_saves)
-        shots_val = safe_int(raw_shots)
-        ga_val    = safe_int(raw_ga)
-
-        # If one of the headers held combined "saves/shots" in the saves column:
-        if saves_val is not None and raw_saves and "/" in raw_saves and shots_val is None:
-            try:
-                pair = [int(x) for x in re.findall(r"\d+", raw_saves)]
-                if len(pair) >= 2:
-                    saves_val, shots_val = pair[0], pair[1]
-            except Exception:
-                pass
-
-        # If shots is missing but we have saves + GA, derive shots = saves + GA
-        if shots_val is None and (saves_val is not None or ga_val is not None):
-            if saves_val is not None and ga_val is not None:
-                shots_val = saves_val + ga_val
-
-        # Parse save percentage (may be like "86.7", "86,7", "86.7 %")
-        pct_val: Optional[float] = None
-        if raw_pct:
-            pct_txt = raw_pct.replace(",", ".")
-            m = re.search(r"(\d+(?:\.\d+)?)", pct_txt)
-            if m:
-                try:
-                    pct_number = float(m.group(1))
-                    # If value looks like 0..1, keep; if 0..100, convert
-                    pct_val = pct_number if pct_number <= 1.5 else pct_number / 100.0
-                except Exception:
-                    pct_val = None
-
-        # As a fallback, compute save% from saves/shots
-        if pct_val is None:
-            pct_val = compute_save_pct(saves_val, shots_val)
-
-        toi_seconds = time_str_to_seconds(raw_toi)
-
-        rows.append({
-            "goalie_name": name,
-            "team_name": team_hint,
-            "saves": saves_val,
-            "shots_against": shots_val,
-            "goals_against": ga_val,
-            "save_pct": pct_val,
-            "toi_seconds": toi_seconds,
-        })
-
-    return rows
+        name = cells[name_idx] if name_idx is not None else cells[0]
+        saves = as_int(cells[saves_idx]) if saves_idx is not None else None
+        shots = as_int(cells[shots_idx]) if shots_idx is not None else None
+        goals = as_int(cells[goals_idx]) if goals_idx is not None else None
+        toi = time_to_seconds(cells[time_idx]) if time_idx is not None else None
+        yield Appearance(
+            game_id=game_id,
+            goalie_name=name,
+            team_name=team_name,
+            saves=saves,
+            shots_against=shots,
+            goals_against=goals,
+            save_pct=compute_save_percentage(saves, shots),
+            time_on_ice_seconds=toi,
+        )
 
 
-def parse_game_page(session: requests.Session, url: str) -> Tuple[Game, List[Appearance]]:
-    """
-    Parse a single game page:
-      - Extract meta (teams, date)
-      - Extract goalie tables for both teams (handles multiple goalies = in-game swaps)
-    Returns a Game object and a list of Appearance objects.
-    """
-    doc = fetch_html(session, url)
-    game_id = parse_game_id_from_url(url)
+def parse_game(doc: BeautifulSoup, url: str) -> tuple[Game, List[Appearance]]:
+    game_id = parse_game_id(url)
+    date_text = first_text(doc, DATE_SELECTORS)
+    home = first_text(doc, TEAM_SELECTORS)
+    away = first_text(doc, AWAY_SELECTORS)
+    game = Game(
+        game_id=game_id,
+        url=url,
+        date=parse_date(date_text),
+        home_team=home,
+        away_team=away,
+    )
 
-    if doc is None:
-        # Return a minimal game object so caller can record a "failed parse"
-        logger.warning("Game page unavailable for %s", url)
-        return Game(game_id=game_id, url=url, date=None, home_team=None, away_team=None), []
-
-    home_team, away_team, date_dt = parse_game_meta(doc)
-
-    # Find goalie tables (often 1 per team; if combined, both parsed)
-    tables = find_goalie_tables(doc)
     appearances: List[Appearance] = []
-
-    # Heuristic: try to split tables per team based on proximity to team names in DOM text
-    full_text = doc.get_text(" ", strip=True)
-    team_candidates = [t for t in [home_team, away_team] if t]
-
-    for tb in tables:
-        # Rough team hint: if team name occurs near this table in the text
-        team_hint = None
-        local_text = tb.get_text(" ", strip=True)
-        for t in team_candidates:
-            if t and (t in local_text):
-                team_hint = t
-                break
-
-        # If no direct hint, leave None; the parser still keeps the rows.
-        rows = parse_goalie_rows_from_table(tb, team_hint)
-        for r in rows:
-            appearances.append(Appearance(
-                game_id=game_id,
-                goalie_name=r["goalie_name"],
-                team_name=r.get("team_name") or "",  # None -> empty string for DB consistency
-                saves=r.get("saves"),
-                shots_against=r.get("shots_against"),
-                goals_against=r.get("goals_against"),
-                save_pct=r.get("save_pct"),
-                toi_seconds=r.get("toi_seconds"),
-            ))
-
-    return Game(game_id=game_id, url=url, date=date_dt, home_team=home_team, away_team=away_team), appearances
+    for idx, table in enumerate(extract_goalie_tables(doc)):
+        team_hint: Optional[str] = None
+        table_text = table.get_text(" ", strip=True)
+        if home and home in table_text:
+            team_hint = home
+        elif away and away in table_text:
+            team_hint = away
+        elif home or away:
+            team_hint = home if idx == 0 else away
+        appearances.extend(parse_goalie_rows(table, game_id, team_hint))
+    return game, appearances
 
 
-# ----------------------------
-# Database
-# ----------------------------
+# -------------------------
+# Output helpers
+# -------------------------
 
-def init_db(conn: sqlite3.Connection) -> None:
-    """
-    Create tables if not exist. Keep schema simple & normalized.
-    """
-    cur = conn.cursor()
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS games (
-        game_id TEXT PRIMARY KEY,
-        url TEXT,
-        date_utc TEXT,              -- ISO8601
-        home_team TEXT,
-        away_team TEXT,
-        scraped_at_utc TEXT
-    )
-    """)
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS goalies (
-        goalie_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        goalie_name TEXT UNIQUE
-    )
-    """)
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS appearances (
-        appearance_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        game_id TEXT,
-        goalie_id INTEGER,
-        team_name TEXT,
-        saves INTEGER,
-        shots_against INTEGER,
-        goals_against INTEGER,
-        save_pct REAL,         -- 0..1
-        toi_seconds INTEGER,
-        FOREIGN KEY (game_id) REFERENCES games(game_id),
-        FOREIGN KEY (goalie_id) REFERENCES goalies(goalie_id)
-    )
-    """)
-    # Useful indexes for speed
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_appearances_goalie ON appearances(goalie_id)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_appearances_game ON appearances(game_id)")
-    conn.commit()
+def appearances_to_frame(appearances: Iterable[Appearance]) -> pd.DataFrame:
+    records = [
+        {
+            "game_id": app.game_id,
+            "goalie": app.goalie_name,
+            "team": app.team_name,
+            "saves": app.saves,
+            "shots_against": app.shots_against,
+            "goals_against": app.goals_against,
+            "save_pct": app.save_pct,
+            "time_on_ice_seconds": app.time_on_ice_seconds,
+        }
+        for app in appearances
+    ]
+    return pd.DataFrame.from_records(records)
 
 
-def upsert_game(conn: sqlite3.Connection, game: Game) -> None:
-    cur = conn.cursor()
-    cur.execute("""
-    INSERT INTO games (game_id, url, date_utc, home_team, away_team, scraped_at_utc)
-    VALUES (?, ?, ?, ?, ?, ?)
-    ON CONFLICT(game_id) DO UPDATE SET
-        url=excluded.url,
-        date_utc=excluded.date_utc,
-        home_team=excluded.home_team,
-        away_team=excluded.away_team,
-        scraped_at_utc=excluded.scraped_at_utc
-    """, (
-        game.game_id,
-        game.url,
-        game.date.isoformat() if game.date else None,
-        game.home_team,
-        game.away_team,
-        datetime.utcnow().isoformat(timespec="seconds")
-    ))
-    conn.commit()
+def games_to_frame(games: Iterable[Game]) -> pd.DataFrame:
+    records = [
+        {
+            "game_id": game.game_id,
+            "url": game.url,
+            "date": game.date,
+            "home_team": game.home_team,
+            "away_team": game.away_team,
+        }
+        for game in games
+    ]
+    return pd.DataFrame.from_records(records)
 
 
-def get_or_create_goalie_id(conn: sqlite3.Connection, goalie_name: str) -> int:
-    cur = conn.cursor()
-    cur.execute("SELECT goalie_id FROM goalies WHERE goalie_name = ?", (goalie_name,))
-    row = cur.fetchone()
-    if row:
-        return row[0]
-    cur.execute("INSERT INTO goalies (goalie_name) VALUES (?)", (goalie_name,))
-    conn.commit()
-    return cur.lastrowid
+def write_excel(
+    games: Iterable[Game], appearances: Iterable[Appearance], path: Path
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with pd.ExcelWriter(path, engine="openpyxl") as writer:
+        games_to_frame(games).to_excel(writer, sheet_name="games", index=False)
+        appearances_to_frame(appearances).to_excel(
+            writer, sheet_name="appearances", index=False
+        )
 
 
-def insert_appearances(conn: sqlite3.Connection, game_id: str, appearances: List[Appearance]) -> None:
-    """
-    Insert appearances for one game. We do a simple strategy:
-     - Delete old rows for that game (idempotent re-runs).
-     - Insert fresh appearances.
-    """
-    cur = conn.cursor()
-    cur.execute("DELETE FROM appearances WHERE game_id = ?", (game_id,))
-    for a in appearances:
-        goalie_id = get_or_create_goalie_id(conn, a.goalie_name)
-        cur.execute("""
-        INSERT INTO appearances
-            (game_id, goalie_id, team_name, saves, shots_against, goals_against, save_pct, toi_seconds)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            a.game_id,
-            goalie_id,
-            a.team_name,
-            a.saves,
-            a.shots_against,
-            a.goals_against,
-            a.save_pct,
-            a.toi_seconds
-        ))
-    conn.commit()
-
-
-# ----------------------------
-# Orchestration
-# ----------------------------
-
-def scrape_fixture_for_game_links(session: requests.Session, fixture_url: str) -> List[str]:
-    """
-    Load the fixture list and return unique game links.
-    """
-    doc = fetch_html(session, fixture_url)
-    if doc is None:
-        raise RuntimeError(f"Failed to load fixture list: {fixture_url}")
-    links = find_game_links(doc, fixture_url)
-    if not links:
-        logger.warning("No game links discovered on fixture page. "
-                       "Consider adjusting KNOWN_SELECTORS['game_link_hrefs_contains'].")
-    return links
-
-
-def process_games(session: requests.Session, game_urls: List[str], conn: sqlite3.Connection) -> None:
-    """
-    Fetch and parse all game pages concurrently, with progress and robust error handling.
-    """
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-        futures = {pool.submit(parse_game_page, session, url): url for url in game_urls}
-        for fut in tqdm(as_completed(futures), total=len(futures), desc="Scraping games", unit="game"):
-            url = futures[fut]
-            try:
-                game, appearances = fut.result()
-                upsert_game(conn, game)
-                insert_appearances(conn, game.game_id, appearances)
-            except Exception as e:
-                logger.error("Error processing %s: %s", url, e)
-
-
-# ----------------------------
-# Reporting / Graphing
-# ----------------------------
-
-def build_goalie_timeline(conn: sqlite3.Connection) -> pd.DataFrame:
-    """
-    Build a DataFrame with per-appearance save% over time for every goalie.
-    Each row corresponds to ONE appearance (i.e., if a goalie swaps mid-game, that's a separate row).
-    """
-    q = """
-    SELECT
-        g.goalie_name,
-        gm.date_utc,
-        ap.game_id,
-        ap.save_pct,
-        ap.saves,
-        ap.shots_against,
-        ap.goals_against,
-        ap.toi_seconds,
-        ap.team_name
-    FROM appearances ap
-    JOIN goalies g  ON g.goalie_id = ap.goalie_id
-    JOIN games gm   ON gm.game_id   = ap.game_id
-    WHERE gm.date_utc IS NOT NULL
-    ORDER BY g.goalie_name, gm.date_utc, ap.appearance_id
-    """
-    df = pd.read_sql_query(q, conn, parse_dates=["date_utc"])
-    # Defensive: there may be rows with NULL save_pct; we keep them (plotted as gaps)
-    return df
-
-
-def plot_savepct_timeline(df: pd.DataFrame, outfile: str, max_goalies: Optional[int] = MAX_GOALIES_IN_GRAPH) -> None:
-    """
-    Plot a timeline of save% per goalie.
-    - One line per goalie (with markers for appearances).
-    - If too many goalies, optionally cap to top-N by number of appearances (to keep the chart readable).
-    """
-    if df.empty:
-        logger.warning("No data to plot.")
+def create_plot(appearances: Iterable[Appearance], output_path: Path) -> None:
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:  # pragma: no cover - optional dependency
+        logger.info("matplotlib not installed; skipping plot generation")
         return
 
-    # Decide which goalies to include
-    counts = df.groupby("goalie_name")["game_id"].nunique().sort_values(ascending=False)
-    if max_goalies is not None and len(counts) > max_goalies:
-        kept_goalies = set(counts.head(max_goalies).index)
-        df_plot = df[df["goalie_name"].isin(kept_goalies)].copy()
-        dropped = len(counts) - len(kept_goalies)
-        notice = f"(showing top {len(kept_goalies)} goalies by appearances; {dropped} hidden)"
-    else:
-        df_plot = df.copy()
-        notice = None
+    df = appearances_to_frame(appearances)
+    df = df.dropna(subset=["save_pct", "goalie", "game_id"])
+    if df.empty:
+        logger.info("No save percentage data found; skipping plot generation")
+        return
+    pivot = df.pivot_table(
+        index="game_id",
+        columns="goalie",
+        values="save_pct",
+        aggfunc="mean",
+    ).sort_index()
 
-    # Sort by date for plotting
-    df_plot = df_plot.sort_values(["goalie_name", "date_utc"])
-
-    plt.figure(figsize=(14, 8))
-    # Plot each goalie as its own series, connecting their appearances over time
-    for goalie, sub in df_plot.groupby("goalie_name"):
-        # Sort for safety
-        sub = sub.sort_values("date_utc")
-        plt.plot(sub["date_utc"], sub["save_pct"], marker="o", linewidth=1.5, label=goalie)
-
-    ax = plt.gca()
-    ax.yaxis.set_major_formatter(PercentFormatter(xmax=1.0))
-    plt.title("Floorball Goalies — Save Percentage Timeline")
-    plt.xlabel("Game Date")
-    plt.ylabel("Save Percentage")
-    plt.grid(True, linestyle="--", alpha=0.4)
-    # Place legend outside to avoid clutter
-    plt.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=False, title="Goalie")
-    if notice:
-        plt.suptitle(notice, y=0.98, fontsize=9, color="gray")
-
+    plt.figure(figsize=(12, 6))
+    pivot.plot(marker="o")
+    plt.ylabel("Save %")
+    plt.ylim(0, 1)
+    plt.grid(True, linestyle="--", alpha=0.3)
     plt.tight_layout()
-    plt.savefig(outfile, dpi=150)
-    logger.info("Saved timeline plot → %s", outfile)
+    plt.savefig(output_path)
+    plt.close()
 
 
-# ----------------------------
-# Main
-# ----------------------------
+# -------------------------
+# CLI entry-point
+# -------------------------
 
-def main() -> int:
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--season-url",
+        default=DEFAULT_FIXTURE_URL,
+        help="Fixture list to scrape (defaults to a known season).",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=DEFAULT_OUTPUT,
+        help="Excel file to write (default: goalie_stats.xlsx)",
+    )
+    parser.add_argument(
+        "--plot",
+        type=Path,
+        default=DEFAULT_PLOT,
+        help="Optional save-percentage plot (PNG).",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable debug logging for detailed progress information.",
+    )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress informational output, showing only warnings and errors.",
+    )
+
+    args = parser.parse_args()
+
+    if args.verbose and args.quiet:
+        parser.error("--verbose and --quiet are mutually exclusive")
+
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.WARNING if args.quiet else logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
     session = build_session()
-    conn = sqlite3.connect(DB_PATH)
-    init_db(conn)
+    logger.info("Fetching fixture list: %s", args.season_url)
+    fixture_doc = fetch_html(session, args.season_url)
+    game_links = sorted(set(iter_game_links(fixture_doc, args.season_url)))
+    logger.info("Found %d unique game links", len(game_links))
 
-    # 1) Discover game links from the fixture list
-    try:
-        game_urls = scrape_fixture_for_game_links(session, FIXTURE_URL)
-        if not game_urls:
-            logger.error("No game URLs found — cannot proceed.")
-            return 2
-    except Exception as e:
-        logger.error("Failed to scrape fixture list: %s", e)
-        return 2
-
-    # 2) Parse & store all games/appearances (concurrently)
-    process_games(session, game_urls, conn)
-
-    # 3) Build DF and plot
-    df = build_goalie_timeline(conn)
-    plot_savepct_timeline(df, OUTPUT_FIG, max_goalies=MAX_GOALIES_IN_GRAPH)
-
-    # 4) Simple console report (optional)
-    if not df.empty:
-        summary = (
-            df.groupby("goalie_name")
-              .agg(
-                  appearances=("game_id", "nunique"),
-                  avg_sv_pct=("save_pct", "mean")
-              )
-              .sort_values(["appearances", "avg_sv_pct"], ascending=[False, False])
+    games: List[Game] = []
+    appearances: List[Appearance] = []
+    total_games = len(game_links)
+    for idx, url in enumerate(game_links, start=1):
+        logger.info("Fetching game %d/%d: %s", idx, total_games, url)
+        try:
+            game_doc = fetch_html(session, url)
+        except requests.RequestException as exc:  # pragma: no cover - network failure
+            logger.warning("Failed to fetch %s: %s", url, exc)
+            continue
+        game, game_appearances = parse_game(game_doc, url)
+        games.append(game)
+        appearances.extend(game_appearances)
+        logger.debug(
+            "Parsed %d goalie appearances from %s",
+            len(game_appearances),
+            url,
         )
-        # Console printout (kept concise; DB + PNG is the main output)
-        print("\n=== Summary (per goalie) ===")
-        print(summary.to_string(float_format=lambda x: f"{x:.3f}"))
-        print(f"\nFigure saved at: {OUTPUT_FIG}")
-        print(f"Database saved at: {DB_PATH}")
-    else:
-        print("No appearance data parsed. Check selectors/patterns and try again.")
-    conn.close()
-    return 0
+
+    if not games:
+        raise SystemExit("No games found; verify the fixture URL.")
+
+    write_excel(games, appearances, args.output)
+    logger.info("Wrote %s", args.output.resolve())
+
+    with contextlib.suppress(Exception):
+        create_plot(appearances, args.plot)
+        logger.info("Created %s", args.plot.resolve())
 
 
 if __name__ == "__main__":
-    # Exit code for shell integration
-    sys.exit(main())
+    main()
