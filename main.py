@@ -47,6 +47,26 @@ DEFAULT_PLOT = Path("goalie_savepct_timeline.png")
 
 # Patterns that help the parser navigate pages that vary slightly each season.
 GOALIE_HEADER = re.compile(r"(Goal(ie|keeper)s?|Målvakter)", re.I)
+GOALIE_NAME_HEADERS = (
+    "spelare",
+    "målvakt",
+    "målvakter",
+    "player",
+    "goalkeeper",
+    "goalie",
+    "namn",
+)
+GOALIE_METRIC_HEADERS = (
+    "rädd",
+    "save",
+    "skott",
+    "shot",
+    "mål",
+    "ga",
+    "insläppta",
+    "tid",
+    "toi",
+)
 TEAM_SELECTORS = [
     "span#ctl00_PlaceHolderMain_lblHomeTeam",
     "div.gameHeader .homeTeam",
@@ -76,6 +96,42 @@ GAME_ID_PATTERNS = [
     )
 ]
 
+DEFAULT_FIXTURE_URL = (
+    "https://statistik.innebandy.se/ft.aspx?scr=fixturelist&ftid=40701"
+)
+DEFAULT_OUTPUT = Path("goalie_stats.xlsx")
+DEFAULT_PLOT = Path("goalie_savepct_timeline.png")
+
+# Patterns that help the parser navigate pages that vary slightly each season.
+GOALIE_HEADER = re.compile(r"(Goal(ie|keeper)s?|Målvakter)", re.I)
+TEAM_SELECTORS = [
+    "span#ctl00_PlaceHolderMain_lblHomeTeam",
+    "div.gameHeader .homeTeam",
+    "div#homeTeam",
+    "td.homeTeamName",
+]
+AWAY_SELECTORS = [
+    "span#ctl00_PlaceHolderMain_lblAwayTeam",
+    "div.gameHeader .awayTeam",
+    "div#awayTeam",
+    "td.awayTeamName",
+]
+DATE_SELECTORS = [
+    "span#ctl00_PlaceHolderMain_lblMatchDate",
+    "div.gameHeader .date",
+    "div#matchDate",
+    "td:contains('Spelades')",
+]
+GAME_LINK_KEYWORDS = ["scr=game", "scr=result", "matchid=", "fmid=", "gameid="]
+GAME_ID_PATTERNS = [
+    re.compile(pat, re.I)
+    for pat in (
+        r"[?&](?:GameID|gameId|gameid)=(?P<id>[A-Za-z0-9\-]+)",
+        r"[?&](?:fmid|FMID)=(?P<id>[A-Za-z0-9\-]+)",
+        r"[?&](?:matchid|MatchId)=(?P<id>[A-Za-z0-9\-]+)",
+        r"[?&](?:gameguid|GameGuid)=(?P<id>[A-Za-z0-9\-]+)",
+    )
+]
 
 @dataclass
 class Game:
@@ -165,6 +221,13 @@ def first_text(doc: BeautifulSoup, selectors: Iterable[str]) -> Optional[str]:
                 return text
     return None
 
+    for selector in selectors:
+        element = doc.select_one(selector)
+        if element:
+            text = element.get_text(strip=True)
+            if text:
+                return text
+    return None
 
 def parse_date(raw: Optional[str]) -> Optional[datetime]:
     if not raw:
@@ -208,6 +271,9 @@ def as_int(raw: str | None) -> Optional[int]:
     ratio = re.match(r"^(\d+)\s*/\s*(\d+)$", raw)
     if ratio:
         return int(ratio.group(1))
+    leading = re.match(r"^(\d+)", raw)
+    if leading:
+        return int(leading.group(1))
     return None
 
 
@@ -220,24 +286,73 @@ def compute_save_percentage(saves: Optional[int], shots: Optional[int]) -> Optio
 
 def extract_goalie_tables(doc: BeautifulSoup) -> List[BeautifulSoup]:
     tables: List[BeautifulSoup] = []
+    seen: set[int] = set()
+
+    def table_headers(table: BeautifulSoup) -> List[str]:
+        headers: List[str] = []
+        header_section = table.find("thead")
+        header_rows = header_section.find_all("tr") if header_section else table.find_all("tr", limit=2)
+        for row in header_rows:
+            for cell in row.find_all(["th", "td"]):
+                text = cell.get_text(strip=True)
+                if not text:
+                    text = cell.get("data-title") or cell.get("title") or ""
+                if text:
+                    headers.append(text.lower())
+            if headers:
+                break
+        return headers
+
+    def looks_like_goalie_table(headers: List[str]) -> bool:
+        if not headers:
+            return False
+        normalized = [header.lower() for header in headers]
+        has_name = any(any(key in header for key in GOALIE_NAME_HEADERS) for header in normalized)
+        metric_hits = sum(
+            1 for header in normalized for key in GOALIE_METRIC_HEADERS if key in header
+        )
+        return has_name and metric_hits >= 2
+
     for heading in doc.find_all(text=GOALIE_HEADER):
         table = heading.find_parent()
         while table and table.name != "table":
             table = table.find_next("table")
-        if table and table not in tables:
+        if table:
+            headers = table_headers(table)
+            if looks_like_goalie_table(headers):
+                ident = id(table)
+                if ident not in seen:
+                    tables.append(table)
+                    seen.add(ident)
+
+    for table in doc.find_all("table"):
+        ident = id(table)
+        if ident in seen:
+            continue
+        headers = table_headers(table)
+        if looks_like_goalie_table(headers):
             tables.append(table)
-    for table in doc.select("table.goalkeepers, table#goalkeepers"):
-        if table not in tables:
-            tables.append(table)
+            seen.add(ident)
+
     return tables
 
 
 def parse_table_headers(table: BeautifulSoup) -> List[str]:
-    header_row = table.find("tr")
-    if not header_row:
-        return []
-    headers = [cell.get_text(strip=True).lower() for cell in header_row.find_all(["th", "td"])]
-    return headers
+    header_section = table.find("thead")
+    rows = header_section.find_all("tr") if header_section else table.find_all("tr")
+    for row in rows:
+        cells = row.find_all(["th", "td"])
+        if not cells:
+            continue
+        headers: List[str] = []
+        for cell in cells:
+            text = cell.get_text(strip=True)
+            if not text:
+                text = cell.get("data-title") or cell.get("title") or ""
+            headers.append(text.lower())
+        if any(headers):
+            return headers
+    return []
 
 
 def deduce_team_name(table: BeautifulSoup, default: Optional[str]) -> Optional[str]:
@@ -258,7 +373,8 @@ def parse_goalie_rows(
     table: BeautifulSoup, game_id: str, default_team: Optional[str]
 ) -> Iterator[Appearance]:
     headers = parse_table_headers(table)
-    rows = table.find_all("tr")[1:]
+    body = table.find("tbody")
+    rows = body.find_all("tr") if body else table.find_all("tr")[1:]
     team_name = deduce_team_name(table, default_team)
 
     def find_index(*candidates: str) -> Optional[int]:
@@ -276,10 +392,16 @@ def parse_goalie_rows(
     shots_idx = find_index("skott", "shots", "sa")
     goals_idx = find_index("mål", "ga", "insläppta")
     saves_idx = find_index("räddningar", "saves")
+    save_pct_idx = find_index("rä%", "rädd%", "save%", "sv%", "räddnings%", "räddnings")
     time_idx = find_index("tid", "toi")
 
     for row in rows:
-        cells = [cell.get_text(strip=True) for cell in row.find_all(["td", "th"])]
+        cells = []
+        for cell in row.find_all(["td", "th"]):
+            text = cell.get_text(" ", strip=True)
+            if not text:
+                text = cell.get("data-title") or cell.get("title") or ""
+            cells.append(text)
         if not cells or (name_idx is not None and not cells[name_idx]):
             continue
         name = cells[name_idx] if name_idx is not None else cells[0]
@@ -287,6 +409,15 @@ def parse_goalie_rows(
         shots = as_int(cells[shots_idx]) if shots_idx is not None else None
         goals = as_int(cells[goals_idx]) if goals_idx is not None else None
         toi = time_to_seconds(cells[time_idx]) if time_idx is not None else None
+        pct = None
+        if save_pct_idx is not None:
+            raw_pct = cells[save_pct_idx].replace("%", "").replace(",", ".")
+            with contextlib.suppress(ValueError):
+                pct = float(raw_pct)
+                if pct > 1.5:
+                    pct /= 100.0
+        if pct is None:
+            pct = compute_save_percentage(saves, shots)
         yield Appearance(
             game_id=game_id,
             goalie_name=name,
@@ -294,7 +425,7 @@ def parse_goalie_rows(
             saves=saves,
             shots_against=shots,
             goals_against=goals,
-            save_pct=compute_save_percentage(saves, shots),
+            save_pct=pct,
             time_on_ice_seconds=toi,
         )
 
@@ -470,6 +601,8 @@ def main() -> None:
             len(game_appearances),
             url,
         )
+        if not game_appearances:
+            logger.warning("No goalie statistics detected for %s", url)
 
     if not games:
         raise SystemExit("No games found; verify the fixture URL.")
