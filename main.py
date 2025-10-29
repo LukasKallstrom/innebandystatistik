@@ -96,6 +96,42 @@ GAME_ID_PATTERNS = [
     )
 ]
 
+DEFAULT_FIXTURE_URL = (
+    "https://statistik.innebandy.se/ft.aspx?scr=fixturelist&ftid=40701"
+)
+DEFAULT_OUTPUT = Path("goalie_stats.xlsx")
+DEFAULT_PLOT = Path("goalie_savepct_timeline.png")
+
+# Patterns that help the parser navigate pages that vary slightly each season.
+GOALIE_HEADER = re.compile(r"(Goal(ie|keeper)s?|Målvakter)", re.I)
+TEAM_SELECTORS = [
+    "span#ctl00_PlaceHolderMain_lblHomeTeam",
+    "div.gameHeader .homeTeam",
+    "div#homeTeam",
+    "td.homeTeamName",
+]
+AWAY_SELECTORS = [
+    "span#ctl00_PlaceHolderMain_lblAwayTeam",
+    "div.gameHeader .awayTeam",
+    "div#awayTeam",
+    "td.awayTeamName",
+]
+DATE_SELECTORS = [
+    "span#ctl00_PlaceHolderMain_lblMatchDate",
+    "div.gameHeader .date",
+    "div#matchDate",
+    "td:contains('Spelades')",
+]
+GAME_LINK_KEYWORDS = ["scr=game", "scr=result", "matchid=", "fmid=", "gameid="]
+GAME_ID_PATTERNS = [
+    re.compile(pat, re.I)
+    for pat in (
+        r"[?&](?:GameID|gameId|gameid)=(?P<id>[A-Za-z0-9\-]+)",
+        r"[?&](?:fmid|FMID)=(?P<id>[A-Za-z0-9\-]+)",
+        r"[?&](?:matchid|MatchId)=(?P<id>[A-Za-z0-9\-]+)",
+        r"[?&](?:gameguid|GameGuid)=(?P<id>[A-Za-z0-9\-]+)",
+    )
+]
 
 @dataclass
 class Game:
@@ -185,6 +221,13 @@ def first_text(doc: BeautifulSoup, selectors: Iterable[str]) -> Optional[str]:
                 return text
     return None
 
+    for selector in selectors:
+        element = doc.select_one(selector)
+        if element:
+            text = element.get_text(strip=True)
+            if text:
+                return text
+    return None
 
 def parse_date(raw: Optional[str]) -> Optional[datetime]:
     if not raw:
