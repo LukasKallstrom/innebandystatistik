@@ -854,7 +854,7 @@ def main() -> None:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("goalie_savepct_interactive.html"),
+        default=Path("index.html"),
         help="Destination HTML file for the interactive plot.",
     )
     parser.add_argument(
