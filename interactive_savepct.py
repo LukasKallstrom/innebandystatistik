@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 from pathlib import Path
-from typing import Tuple, List
+from typing import List, Tuple
 
 import pandas as pd
 import requests
@@ -349,6 +350,483 @@ def build_figure(cumulative: pd.DataFrame, dropped_goalies: List[str]):
     return fig
 
 
+def summarise_goalies(cumulative: pd.DataFrame) -> pd.DataFrame:
+    """Return a per-goalie summary suitable for the dashboard data table."""
+
+    if "team" not in cumulative.columns:
+        cumulative = cumulative.copy()
+        cumulative["team"] = "Unknown"
+
+    cumulative["team"] = cumulative["team"].fillna("Unknown")
+    ordered = cumulative.sort_values("date")
+    grouped = ordered.groupby(["team", "goalie"], dropna=False)
+
+    def _last_valid(series: pd.Series) -> float | None:
+        valid = series.dropna()
+        if valid.empty:
+            return None
+        return float(valid.iloc[-1])
+
+    summary = grouped.agg(
+        games_played=("game_id", pd.Series.nunique),
+        total_shots=("shots_against", "sum"),
+        total_saves=("saves", "sum"),
+        goals_against=("goals_against", "sum"),
+        final_save_pct=("cumulative_save_pct", _last_valid),
+    ).reset_index()
+
+    summary["games_played"] = summary["games_played"].astype(int)
+    for col in ("total_shots", "total_saves", "goals_against"):
+        summary[col] = summary[col].fillna(0).astype(int)
+
+    summary["avg_shots_per_game"] = summary.apply(
+        lambda row: (row["total_shots"] / row["games_played"]) if row["games_played"] else 0.0,
+        axis=1,
+    )
+
+    summary["save_pct_display"] = summary["final_save_pct"].apply(
+        lambda value: f"{value:.1%}" if value is not None else "–"
+    )
+
+    summary = summary.sort_values(["team", "goalie"]).reset_index(drop=True)
+    return summary
+
+
+def build_dashboard_html(
+    figure,
+    cumulative: pd.DataFrame,
+    summary: pd.DataFrame,
+    dropped_goalies: List[str],
+) -> str:
+    """Compose the interactive dashboard HTML shell."""
+
+    import plotly.io as pio
+
+    chart_html = pio.to_html(
+        figure,
+        include_plotlyjs=False,
+        full_html=False,
+        div_id="savepct-chart",
+        config={
+            "displaylogo": False,
+            "responsive": True,
+            "modeBarButtonsToRemove": ["lasso2d", "select2d"],
+        },
+    )
+
+    cumulative = cumulative.copy()
+    cumulative["team"] = cumulative.get("team", "Unknown").fillna("Unknown")
+
+    goalie_team_map = (
+        cumulative[["goalie", "team"]]
+        .drop_duplicates()
+        .sort_values("goalie")
+        .assign(team=lambda df: df["team"].fillna("Unknown"))
+    )
+    goalie_to_team = {row.goalie: row.team for row in goalie_team_map.itertuples(index=False)}
+
+    team_options = sorted({team for team in cumulative["team"].dropna().unique()})
+
+    summary_records = summary.replace({pd.NA: None}).to_dict(orient="records")
+
+    total_goalies = len({row["goalie"] for row in summary_records})
+    total_teams = len(team_options)
+    date_min = pd.to_datetime(cumulative["date"]).min()
+    date_max = pd.to_datetime(cumulative["date"]).max()
+    date_range = "–"
+    if pd.notna(date_min) and pd.notna(date_max):
+        date_range = f"{date_min.date().isoformat()} → {date_max.date().isoformat()}"
+
+    dropdown_options = "".join(
+        f'<option value="{team}">{team}</option>' for team in team_options
+    )
+
+    dropped_html = (
+        ""
+        if not dropped_goalies
+        else "<p class=\"empty-state\">Filtered goalies with zero recorded shots: "
+        + ", ".join(dropped_goalies)
+        + "</p>"
+    )
+
+    return f"""<!DOCTYPE html>
+<html lang=\"en\">
+  <head>
+    <meta charset=\"utf-8\" />
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+    <title>Goalie Save Percentage Dashboard</title>
+    <link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin />
+    <link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap\" />
+    <script src=\"https://cdn.plot.ly/plotly-2.32.0.min.js\"></script>
+    <style>
+      :root {{
+        color-scheme: light dark;
+        --bg: #0f172a;
+        --bg-panel: rgba(15, 23, 42, 0.75);
+        --bg-light: #f8fafc;
+        --border: rgba(148, 163, 184, 0.35);
+        --text: #0f172a;
+        --text-muted: #475569;
+        --accent: #2563eb;
+        font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }}
+
+      body {{
+        margin: 0;
+        padding: 0;
+        background: linear-gradient(160deg, #020617, #0f172a 55%, #1e293b);
+        color: white;
+        min-height: 100vh;
+      }}
+
+      .page {{
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 2.5rem 1.5rem 4rem;
+        display: flex;
+        flex-direction: column;
+        gap: 2.5rem;
+      }}
+
+      header {{
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }}
+
+      header h1 {{
+        font-size: clamp(1.75rem, 4vw, 2.75rem);
+        margin: 0;
+        letter-spacing: -0.02em;
+      }}
+
+      header p {{
+        margin: 0;
+        color: rgba(226, 232, 240, 0.85);
+        max-width: 60ch;
+      }}
+
+      .stats-grid {{
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 1rem;
+      }}
+
+      .stat-card {{
+        background: rgba(15, 23, 42, 0.6);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 1.25rem 1.4rem;
+        backdrop-filter: blur(8px);
+      }}
+
+      .stat-card h2 {{
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin: 0 0 0.25rem;
+        color: rgba(148, 163, 184, 0.85);
+      }}
+
+      .stat-card span {{
+        font-size: 1.8rem;
+        font-weight: 600;
+      }}
+
+      .panel {{
+        background: rgba(15, 23, 42, 0.65);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 1.5rem;
+        box-shadow: 0 25px 45px rgba(15, 23, 42, 0.45);
+        backdrop-filter: blur(12px);
+      }}
+
+      .panel h2 {{
+        margin-top: 0;
+        font-size: 1.3rem;
+        margin-bottom: 1rem;
+      }}
+
+      .controls {{
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-bottom: 1rem;
+      }}
+
+      .controls label {{
+        font-size: 0.9rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        color: rgba(226, 232, 240, 0.9);
+      }}
+
+      .controls select,
+      .controls input {{
+        min-width: 240px;
+        padding: 0.6rem 0.75rem;
+        border-radius: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        background-color: rgba(15, 23, 42, 0.7);
+        color: white;
+        font-size: 0.95rem;
+      }}
+
+      .controls button {{
+        align-self: flex-end;
+        padding: 0.6rem 1.1rem;
+        border-radius: 12px;
+        border: none;
+        background: linear-gradient(120deg, rgba(59, 130, 246, 0.9), rgba(99, 102, 241, 0.85));
+        color: white;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+      }}
+
+      .controls button:hover {{
+        transform: translateY(-1px);
+        box-shadow: 0 15px 30px rgba(59, 130, 246, 0.35);
+      }}
+
+      #savepct-chart {{
+        width: 100%;
+        min-height: 480px;
+      }}
+
+      table {{
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 1rem;
+        font-size: 0.95rem;
+      }}
+
+      thead {{
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.08em;
+        color: rgba(148, 163, 184, 0.8);
+      }}
+
+      th, td {{
+        padding: 0.65rem 0.5rem;
+        text-align: left;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+      }}
+
+      tbody tr:hover {{
+        background-color: rgba(148, 163, 184, 0.12);
+      }}
+
+      th.sortable {{
+        cursor: pointer;
+      }}
+
+      th.sortable::after {{
+        content: '\\25B4\\25BE';
+        margin-left: 0.35rem;
+        font-size: 0.75rem;
+        opacity: 0.45;
+      }}
+
+      .empty-state {{
+        margin: 1.5rem 0 0;
+        color: rgba(226, 232, 240, 0.7);
+      }}
+
+      @media (max-width: 768px) {{
+        .controls label {{
+          width: 100%;
+        }}
+        .controls button {{
+          width: 100%;
+        }}
+      }}
+    </style>
+  </head>
+  <body>
+    <div class=\"page\">
+      <header>
+        <h1>Goalie Save Percentage Dashboard</h1>
+        <p>Explore how every goalie performs throughout the season. Filter by team, search for a specific goalie, and inspect a sortable table with the latest cumulative numbers.</p>
+      </header>
+
+      <section class=\"stats-grid\">
+        <article class=\"stat-card\">
+          <h2>Teams tracked</h2>
+          <span>{total_teams}</span>
+        </article>
+        <article class=\"stat-card\">
+          <h2>Goalies tracked</h2>
+          <span>{total_goalies}</span>
+        </article>
+        <article class=\"stat-card\">
+          <h2>Match coverage</h2>
+          <span>{date_range}</span>
+        </article>
+        <article class=\"stat-card\">
+          <h2>Zero-shot goalies</h2>
+          <span>{len(dropped_goalies)}</span>
+        </article>
+      </section>
+
+      <section class=\"panel\">
+        <h2>Season timeline</h2>
+        <div class=\"controls\">
+          <label>
+            Team filter
+            <select id=\"team-filter\">
+              <option value=\"ALL\">All teams</option>
+              {dropdown_options}
+            </select>
+          </label>
+          <label>
+            Highlight goalie
+            <input id=\"goalie-search\" type=\"search\" placeholder=\"Search goalie name…\" />
+          </label>
+          <button id=\"reset-view\" type=\"button\">Reset view</button>
+        </div>
+        {chart_html}
+        {dropped_html}
+      </section>
+
+      <section class=\"panel\">
+        <h2>Sortable goalie table</h2>
+        <table>
+          <thead>
+            <tr>
+              <th class=\"sortable\" data-key=\"team\">Team</th>
+              <th class=\"sortable\" data-key=\"goalie\">Goalie</th>
+              <th class=\"sortable\" data-key=\"games_played\">Games</th>
+              <th class=\"sortable\" data-key=\"total_shots\">Shots</th>
+              <th class=\"sortable\" data-key=\"total_saves\">Saves</th>
+              <th class=\"sortable\" data-key=\"goals_against\">Goals Against</th>
+              <th class=\"sortable\" data-key=\"avg_shots_per_game\">Avg Shots/Game</th>
+              <th class=\"sortable\" data-key=\"final_save_pct\">Cumulative Save%</th>
+            </tr>
+          </thead>
+          <tbody id=\"summary-table-body\"></tbody>
+        </table>
+        <p class=\"empty-state\" id=\"table-empty\" hidden>No goalies match the current filters.</p>
+      </section>
+    </div>
+
+    <script>
+      const summaryData = {json.dumps(summary_records, ensure_ascii=False)};
+      const goalieToTeam = {json.dumps(goalie_to_team, ensure_ascii=False)};
+      const traceGoalies = {json.dumps([trace.name for trace in figure.data], ensure_ascii=False)};
+
+      function renderTable(rows) {{
+        const tbody = document.getElementById('summary-table-body');
+        tbody.innerHTML = '';
+        if (!rows.length) {{
+          document.getElementById('table-empty').hidden = false;
+          return;
+        }}
+        document.getElementById('table-empty').hidden = true;
+        const fragment = document.createDocumentFragment();
+        rows.forEach((row) => {{
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${{row.team || 'Unknown'}}</td>
+            <td>${{row.goalie}}</td>
+            <td>${{row.games_played}}</td>
+            <td>${{row.total_shots}}</td>
+            <td>${{row.total_saves}}</td>
+            <td>${{row.goals_against}}</td>
+            <td>${{(row.avg_shots_per_game || 0).toFixed(1)}}</td>
+            <td>${{row.save_pct_display || '–'}}</td>`;
+          fragment.appendChild(tr);
+        }});
+        tbody.appendChild(fragment);
+      }}
+
+      function currentFilters() {{
+        return {{
+          team: document.getElementById('team-filter').value,
+          search: document.getElementById('goalie-search').value.trim().toLowerCase(),
+        }};
+      }}
+
+      function applyFilters(data) {{
+        const {{ team, search }} = currentFilters();
+        return data.filter((row) => {{
+          const matchesTeam = team === 'ALL' || (row.team || 'Unknown') === team;
+          const matchesSearch = !search || row.goalie.toLowerCase().includes(search);
+          return matchesTeam && matchesSearch;
+        }});
+      }}
+
+      function restyleChart() {{
+        const {{ team, search }} = currentFilters();
+        traceGoalies.forEach((goalie, index) => {{
+          const teamMatch = team === 'ALL' || goalieToTeam[goalie] === team;
+          const searchMatch = !search || goalie.toLowerCase().includes(search);
+          const visible = teamMatch && searchMatch;
+          Plotly.restyle('savepct-chart', {{ visible: visible ? true : 'legendonly' }}, [index]);
+        }});
+      }}
+
+      function sortBy(key, ascending) {{
+        return (a, b) => {{
+          const av = a[key] ?? (typeof a[key] === 'number' ? 0 : '');
+          const bv = b[key] ?? (typeof b[key] === 'number' ? 0 : '');
+          if (typeof av === 'number' && typeof bv === 'number') {{
+            return ascending ? av - bv : bv - av;
+          }}
+          return ascending ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
+        }};
+      }}
+
+      window.addEventListener('DOMContentLoaded', () => {{
+        let sortState = {{ key: 'team', ascending: true }};
+        renderTable(summaryData.sort(sortBy(sortState.key, sortState.ascending)));
+
+        document.getElementById('team-filter').addEventListener('change', () => {{
+          const filtered = applyFilters(summaryData).sort(sortBy(sortState.key, sortState.ascending));
+          renderTable(filtered);
+          restyleChart();
+        }});
+
+        document.getElementById('goalie-search').addEventListener('input', () => {{
+          const filtered = applyFilters(summaryData).sort(sortBy(sortState.key, sortState.ascending));
+          renderTable(filtered);
+          restyleChart();
+        }});
+
+        document.getElementById('reset-view').addEventListener('click', () => {{
+          sortState = {{ key: 'team', ascending: true }};
+          document.getElementById('team-filter').value = 'ALL';
+          document.getElementById('goalie-search').value = '';
+          renderTable(summaryData.sort(sortBy(sortState.key, sortState.ascending)));
+          traceGoalies.forEach((goalie, index) => {{
+            Plotly.restyle('savepct-chart', {{ visible: true }}, [index]);
+          }});
+        }});
+
+        document.querySelectorAll('th.sortable').forEach((th) => {{
+          th.addEventListener('click', () => {{
+            const key = th.dataset.key;
+            if (sortState.key === key) {{
+              sortState.ascending = !sortState.ascending;
+            }} else {{
+              sortState = {{ key, ascending: true }};
+            }}
+            const filtered = applyFilters(summaryData).sort(sortBy(sortState.key, sortState.ascending));
+            renderTable(filtered);
+          }});
+        }});
+
+        Plotly.d3.select('#savepct-chart').on('plotly_doubleclick', () => {{
+          document.getElementById('reset-view').click();
+        }});
+      }});
+    </script>
+  </body>
+</html>"""
+
 # -----------------------
 # CLI
 # -----------------------
@@ -411,8 +889,11 @@ def main() -> None:
         raise SystemExit("No cumulative save-percentage data available to plot.")
 
     figure = build_figure(cumulative, dropped_goalies)
+    summary = summarise_goalies(cumulative)
+    html = build_dashboard_html(figure, cumulative, summary, dropped_goalies)
+
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    figure.write_html(args.output, include_plotlyjs="cdn")
+    args.output.write_text(html, encoding="utf-8")
     logger.info("Interactive plot written to %s", args.output.resolve())
 
 
