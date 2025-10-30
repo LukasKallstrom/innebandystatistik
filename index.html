@@ -143,6 +143,7 @@
       #savepct-chart {
         width: 100%;
         min-height: 480px;
+        touch-action: pan-y pinch-zoom;
       }
 
       table {
@@ -191,6 +192,29 @@
         }
         .controls button {
           width: 100%;
+        }
+        .controls select,
+        .controls input {
+          min-width: 0;
+          width: 100%;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .page {
+          padding: 2rem 1rem 3rem;
+        }
+
+        .panel {
+          padding: 1.25rem 1rem 1.5rem;
+        }
+
+        .stat-card {
+          padding: 1rem 1.1rem;
+        }
+
+        #savepct-chart {
+          min-height: 360px;
         }
       }
     </style>
@@ -308,6 +332,78 @@
         });
       }
 
+      function updateChartLayout() {
+        const chart = document.getElementById('savepct-chart');
+        if (!chart || !chart.layout) {
+          return;
+        }
+
+        const baseLegend = chart.layout.legend || {};
+        const baseLegendTitle = baseLegend.title || {};
+        const xaxisBase = chart.layout.xaxis || {};
+        const yaxisBase = chart.layout.yaxis || {};
+
+        const isNarrow = window.matchMedia('(max-width: 768px)').matches;
+        const isCompact = window.matchMedia('(max-width: 480px)').matches;
+        const legendYOffset = isNarrow ? (isCompact ? -0.5 : -0.35) : 1;
+
+        const legend = {
+          ...baseLegend,
+          orientation: isNarrow ? 'h' : baseLegend.orientation ?? 'v',
+          x: 0,
+          xanchor: 'left',
+          y: legendYOffset,
+          yanchor: isNarrow ? 'top' : (baseLegend.yanchor ?? 'top'),
+          font: {
+            ...(baseLegend.font || {}),
+            size: isNarrow ? 11 : (baseLegend.font?.size ?? 12),
+          },
+        };
+
+        if (baseLegend.title && baseLegend.title.text) {
+          legend.title = {
+            ...baseLegendTitle,
+            text: baseLegend.title.text,
+            font: {
+              ...(baseLegendTitle.font || {}),
+              size: isNarrow ? 12 : (baseLegendTitle.font?.size ?? 12),
+            },
+          };
+        }
+
+        const layoutUpdate = {
+          autosize: true,
+          height: isNarrow ? (isCompact ? 360 : 420) : 560,
+          margin: {
+            t: 60,
+            r: isNarrow ? 12 : 32,
+            l: isNarrow ? 48 : 70,
+            b: isNarrow ? (isCompact ? 120 : 96) : 70,
+          },
+          legend,
+          xaxis: {
+            ...xaxisBase,
+            automargin: true,
+            tickangle: isNarrow ? -45 : (xaxisBase.tickangle ?? 0),
+            tickfont: {
+              ...(xaxisBase.tickfont || {}),
+              size: isNarrow ? 10 : (xaxisBase.tickfont?.size ?? 12),
+            },
+          },
+          yaxis: {
+            ...yaxisBase,
+            automargin: true,
+            tickfont: {
+              ...(yaxisBase.tickfont || {}),
+              size: isNarrow ? 10 : (yaxisBase.tickfont?.size ?? 12),
+            },
+          },
+        };
+
+        Plotly.relayout(chart, layoutUpdate);
+        Plotly.Plots.resize(chart);
+      }
+
       function restyleChart() {
         const { team, search } = currentFilters();
         traceGoalies.forEach((goalie, index) => {
@@ -316,6 +412,7 @@
           const visible = teamMatch && searchMatch;
           Plotly.restyle('savepct-chart', { visible: visible ? true : 'legendonly' }, [index]);
         });
+        updateChartLayout();
       }
 
       function sortBy(key, ascending) {
@@ -332,6 +429,7 @@
       window.addEventListener('DOMContentLoaded', () => {
         let sortState = { key: 'team', ascending: true };
         renderTable(summaryData.sort(sortBy(sortState.key, sortState.ascending)));
+        requestAnimationFrame(updateChartLayout);
 
         document.getElementById('team-filter').addEventListener('change', () => {
           const filtered = applyFilters(summaryData).sort(sortBy(sortState.key, sortState.ascending));
@@ -353,6 +451,7 @@
           traceGoalies.forEach((goalie, index) => {
             Plotly.restyle('savepct-chart', { visible: true }, [index]);
           });
+          updateChartLayout();
         });
 
         document.querySelectorAll('th.sortable').forEach((th) => {
@@ -371,6 +470,14 @@
         Plotly.d3.select('#savepct-chart').on('plotly_doubleclick', () => {
           document.getElementById('reset-view').click();
         });
+
+        window.addEventListener(
+          'resize',
+          () => {
+            requestAnimationFrame(updateChartLayout);
+          },
+          { passive: true }
+        );
       });
     </script>
   </body>
