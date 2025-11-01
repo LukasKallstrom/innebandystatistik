@@ -319,33 +319,62 @@ def build_figure(cumulative: pd.DataFrame, dropped_goalies: List[str]):
             "cumulative_save_pct": "Cumulative Save %",
             "goalie": "Goalie",
         },
+        color_discrete_sequence=px.colors.qualitative.Bold,
+        custom_data=[
+            "goalie",
+            "team",
+            "game_id",
+            "cumulative_saves",
+            "cumulative_shots",
+        ],
+    )
+
+    fig.update_traces(
+        mode="lines+markers",
+        marker=dict(size=7, line=dict(width=0, color="rgba(15, 23, 42, 0.3)")),
+        line=dict(width=2.5, shape="spline", smoothing=0.6),
+        hovertemplate=(
+            "<b>%{customdata[0]}</b> — %{customdata[1]}<br>"
+            "Date: %{x|%Y-%m-%d}<br>"
+            "Game: %{customdata[2]}<br>"
+            "Shots: %{customdata[4]}<br>"
+            "Saves: %{customdata[3]}<br>"
+            "Save %: %{y:.1%}<extra></extra>"
+        ),
     )
 
     fig.update_layout(
         title="Goalie cumulative save percentage over time",
         hovermode="x unified",
-        xaxis=dict(rangeslider=dict(visible=True)),
-        yaxis=dict(tickformat=".0%", rangemode="tozero"),
-        legend_title_text="Goalie",
-    )
-
-    if dropped_goalies:
-        text_lines = ["<b>Filtered (0 shots):</b>"] + [f"• {name}" for name in dropped_goalies]
-        fig.add_annotation(
-            xref="paper",
-            yref="paper",
-            x=1.0,
-            y=1.0,
+        margin=dict(t=80, r=24, b=80, l=60),
+        legend=dict(
+            title="Goalie",
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
             xanchor="right",
-            yanchor="top",
-            showarrow=False,
-            align="left",
-            bordercolor="rgba(0,0,0,0.2)",
-            borderwidth=1,
-            bgcolor="rgba(0,0,0,0.04)",
-            text="<br>".join(text_lines),
-            font=dict(size=12),
-        )
+            x=1.0,
+            bgcolor="rgba(15, 23, 42, 0.05)",
+        ),
+        plot_bgcolor="rgba(248, 250, 252, 0.98)",
+        paper_bgcolor="rgba(15, 23, 42, 0)",
+        font=dict(family="Inter, sans-serif"),
+        xaxis=dict(
+            rangeslider=dict(visible=True, bgcolor="rgba(148, 163, 184, 0.25)"),
+            showgrid=True,
+            gridcolor="rgba(148, 163, 184, 0.25)",
+            zeroline=False,
+            linecolor="rgba(148, 163, 184, 0.5)",
+        ),
+        yaxis=dict(
+            tickformat=".0%",
+            rangemode="tozero",
+            showgrid=True,
+            gridcolor="rgba(148, 163, 184, 0.2)",
+            linecolor="rgba(148, 163, 184, 0.5)",
+        ),
+        hoverlabel=dict(bgcolor="rgba(15, 23, 42, 0.85)", font=dict(color="#f8fafc")),
+    )
 
     return fig
 
@@ -441,13 +470,15 @@ def build_dashboard_html(
         f'<option value="{team}">{team}</option>' for team in team_options
     )
 
-    dropped_html = (
-        ""
-        if not dropped_goalies
-        else "<p class=\"empty-state\">Filtered goalies with zero recorded shots: "
-        + ", ".join(dropped_goalies)
-        + "</p>"
-    )
+    dropped_html = ""
+    if dropped_goalies:
+        items = "".join(f"<li>{name}</li>" for name in dropped_goalies)
+        dropped_html = (
+            "<div class=\"callout\" role=\"status\">"
+            "  <h3>Filtered goalies (0 recorded shots)</h3>"
+            f"  <ul>{items}</ul>"
+            "</div>"
+        )
 
     return f"""<!DOCTYPE html>
 <html lang=\"en\">
@@ -534,8 +565,8 @@ def build_dashboard_html(
       }}
 
       .panel {{
-        background: rgba(15, 23, 42, 0.65);
-        border: 1px solid var(--border);
+        background: linear-gradient(145deg, rgba(15, 23, 42, 0.72), rgba(30, 41, 59, 0.72));
+        border: 1px solid rgba(148, 163, 184, 0.35);
         border-radius: 18px;
         padding: 1.5rem;
         box-shadow: 0 25px 45px rgba(15, 23, 42, 0.45);
@@ -569,7 +600,7 @@ def build_dashboard_html(
         padding: 0.6rem 0.75rem;
         border-radius: 12px;
         border: 1px solid rgba(148, 163, 184, 0.35);
-        background-color: rgba(15, 23, 42, 0.7);
+        background-color: rgba(248, 250, 252, 0.1);
         color: white;
         font-size: 0.95rem;
       }}
@@ -594,6 +625,10 @@ def build_dashboard_html(
       #savepct-chart {{
         width: 100%;
         min-height: 480px;
+        border-radius: 16px;
+        overflow: hidden;
+        background: rgba(248, 250, 252, 0.08);
+        border: 1px solid rgba(148, 163, 184, 0.2);
       }}
 
       table {{
@@ -634,6 +669,33 @@ def build_dashboard_html(
       .empty-state {{
         margin: 1.5rem 0 0;
         color: rgba(226, 232, 240, 0.7);
+      }}
+
+      .callout {{
+        margin: 1.75rem 0 0;
+        padding: 1.1rem 1.35rem;
+        border-radius: 16px;
+        border: 1px solid rgba(59, 130, 246, 0.45);
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(96, 165, 250, 0.15));
+        color: rgba(226, 232, 240, 0.95);
+        box-shadow: inset 0 1px 0 rgba(148, 197, 255, 0.2);
+      }}
+
+      .callout h3 {{
+        margin: 0 0 0.75rem;
+        font-size: 1rem;
+        letter-spacing: 0.02em;
+      }}
+
+      .callout ul {{
+        margin: 0;
+        padding-left: 1.2rem;
+        display: grid;
+        gap: 0.35rem;
+      }}
+
+      .callout li {{
+        margin: 0;
       }}
 
       @media (max-width: 768px) {{
