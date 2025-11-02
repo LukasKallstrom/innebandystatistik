@@ -192,6 +192,13 @@ main {
   text-decoration: none;
 }
 
+.button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
 .button--primary {
   background: linear-gradient(135deg, var(--accent), var(--accent-strong));
   color: #020617;
@@ -319,6 +326,12 @@ main {
 
 .control-field input::placeholder {
   color: rgba(148, 163, 184, 0.7);
+}
+
+.control-field__help {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
 }
 
 .panel__hint {

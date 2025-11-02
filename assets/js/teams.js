@@ -4,11 +4,12 @@ import {
   createElement,
   formatNumber,
   formatPercent,
+  parseSearchTerms,
   sortData,
 } from './utils.js';
 
 const state = {
-  search: '',
+  searchTerms: [],
   sortKey: 'save_pct',
   ascending: false,
 };
@@ -41,8 +42,12 @@ function aggregateTeams(summary) {
 }
 
 function filterTeams() {
-  const query = state.search;
-  return teams.filter((team) => !query || team.team.toLowerCase().includes(query));
+  if (!state.searchTerms.length) {
+    return teams;
+  }
+  return teams.filter((team) =>
+    state.searchTerms.some((term) => team.team.toLowerCase().includes(term)),
+  );
 }
 
 function renderTable(rows) {
@@ -111,12 +116,12 @@ function registerEvents() {
   const resetButton = document.getElementById('team-reset');
 
   searchInput?.addEventListener('input', (event) => {
-    state.search = event.target.value.trim().toLowerCase();
+    state.searchTerms = parseSearchTerms(event.target.value);
     applyStateChange();
   });
 
   resetButton?.addEventListener('click', () => {
-    state.search = '';
+    state.searchTerms = [];
     state.sortKey = 'save_pct';
     state.ascending = false;
     if (searchInput) searchInput.value = '';
