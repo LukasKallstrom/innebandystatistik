@@ -1,159 +1,408 @@
 <!DOCTYPE html>
-<html lang="sv">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Innebandy målvaktscentral</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <title>Goalie Save Percentage Dashboard</title>
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-    />
-    <link rel="stylesheet" href="assets/css/main.css" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" />
     <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
-    <script type="module" src="assets/js/overview.js" defer></script>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #0f172a;
+        --bg-panel: rgba(15, 23, 42, 0.75);
+        --bg-light: #f8fafc;
+        --border: rgba(148, 163, 184, 0.35);
+        --text: #0f172a;
+        --text-muted: #475569;
+        --accent: #2563eb;
+        font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        background: linear-gradient(160deg, #020617, #0f172a 55%, #1e293b);
+        color: white;
+        min-height: 100vh;
+      }
+
+      .page {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 2.5rem 1.5rem 4rem;
+        display: flex;
+        flex-direction: column;
+        gap: 2.5rem;
+      }
+
+      header {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+
+      header h1 {
+        font-size: clamp(1.75rem, 4vw, 2.75rem);
+        margin: 0;
+        letter-spacing: -0.02em;
+      }
+
+      header p {
+        margin: 0;
+        color: rgba(226, 232, 240, 0.85);
+        max-width: 60ch;
+      }
+
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 1rem;
+      }
+
+      .stat-card {
+        background: rgba(15, 23, 42, 0.6);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 1.25rem 1.4rem;
+        backdrop-filter: blur(8px);
+      }
+
+      .stat-card h2 {
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin: 0 0 0.25rem;
+        color: rgba(148, 163, 184, 0.85);
+      }
+
+      .stat-card span {
+        font-size: 1.8rem;
+        font-weight: 600;
+      }
+
+      .panel {
+        background: linear-gradient(145deg, rgba(15, 23, 42, 0.72), rgba(30, 41, 59, 0.72));
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        border-radius: 18px;
+        padding: 1.5rem;
+        box-shadow: 0 25px 45px rgba(15, 23, 42, 0.45);
+        backdrop-filter: blur(12px);
+      }
+
+      .panel h2 {
+        margin-top: 0;
+        font-size: 1.3rem;
+        margin-bottom: 1rem;
+      }
+
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-bottom: 1rem;
+      }
+
+      .controls label {
+        font-size: 0.9rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        color: rgba(226, 232, 240, 0.9);
+      }
+
+      .controls select,
+      .controls input {
+        min-width: 240px;
+        padding: 0.6rem 0.75rem;
+        border-radius: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        background-color: rgba(248, 250, 252, 0.1);
+        color: white;
+        font-size: 0.95rem;
+      }
+
+      .controls button {
+        align-self: flex-end;
+        padding: 0.6rem 1.1rem;
+        border-radius: 12px;
+        border: none;
+        background: linear-gradient(120deg, rgba(59, 130, 246, 0.9), rgba(99, 102, 241, 0.85));
+        color: white;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+      }
+
+      .controls button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 15px 30px rgba(59, 130, 246, 0.35);
+      }
+
+      #savepct-chart {
+        width: 100%;
+        min-height: 480px;
+        border-radius: 16px;
+        overflow: hidden;
+        background: rgba(248, 250, 252, 0.08);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 1rem;
+        font-size: 0.95rem;
+      }
+
+      thead {
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.08em;
+        color: rgba(148, 163, 184, 0.8);
+      }
+
+      th, td {
+        padding: 0.65rem 0.5rem;
+        text-align: left;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+      }
+
+      tbody tr:hover {
+        background-color: rgba(148, 163, 184, 0.12);
+      }
+
+      th.sortable {
+        cursor: pointer;
+      }
+
+      th.sortable::after {
+        content: '\25B4\25BE';
+        margin-left: 0.35rem;
+        font-size: 0.75rem;
+        opacity: 0.45;
+      }
+
+      .empty-state {
+        margin: 1.5rem 0 0;
+        color: rgba(226, 232, 240, 0.7);
+      }
+
+      .callout {
+        margin: 1.75rem 0 0;
+        padding: 1.1rem 1.35rem;
+        border-radius: 16px;
+        border: 1px solid rgba(59, 130, 246, 0.45);
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(96, 165, 250, 0.15));
+        color: rgba(226, 232, 240, 0.95);
+        box-shadow: inset 0 1px 0 rgba(148, 197, 255, 0.2);
+      }
+
+      .callout h3 {
+        margin: 0 0 0.75rem;
+        font-size: 1rem;
+        letter-spacing: 0.02em;
+      }
+
+      .callout ul {
+        margin: 0;
+        padding-left: 1.2rem;
+        display: grid;
+        gap: 0.35rem;
+      }
+
+      .callout li {
+        margin: 0;
+      }
+
+      @media (max-width: 768px) {
+        .controls label {
+          width: 100%;
+        }
+        .controls button {
+          width: 100%;
+        }
+      }
+    </style>
   </head>
   <body>
-    <header class="top-nav">
-      <div class="top-nav__inner">
-        <p class="brand">Innebandy Goalie Hub</p>
-        <nav aria-label="Huvudnavigation">
-          <ul class="nav-links">
-            <li><a data-page="overview" href="index.html">Översikt</a></li>
-            <li><a data-page="goalies" href="goalies.html">Målvakter</a></li>
-            <li><a data-page="teams" href="teams.html">Lagöversikt</a></li>
-          </ul>
-        </nav>
-      </div>
-    </header>
+    <div class="page">
+      <header>
+        <h1>Goalie Save Percentage Dashboard</h1>
+        <p>Explore how every goalie performs throughout the season. Filter by team, search for a specific goalie, and inspect a sortable table with the latest cumulative numbers.</p>
+      </header>
 
-    <main class="page">
-      <section class="hero">
-        <span class="hero__eyebrow">Säsongssammanställning</span>
-        <h1>Allt du behöver veta om säsongens målvaktsinsatser</h1>
-        <p>
-          Utforska tidslinjen för räddningsprocent, filtrera på lag och hitta snabbinsikter kring vilka
-          målvakter som levererar bäst. Sidan är byggd med JavaScript för att kunna utökas med fler analyser och
-          realtidsdata framöver.
-        </p>
-        <div class="hero__actions">
-          <a class="button button--primary" href="#timeline">Gå till tidslinjen</a>
-          <a class="button button--ghost" href="goalies.html">Öppna målvaktslistan</a>
-        </div>
+      <section class="stats-grid">
+        <article class="stat-card">
+          <h2>Teams tracked</h2>
+          <span>12</span>
+        </article>
+        <article class="stat-card">
+          <h2>Goalies tracked</h2>
+          <span>23</span>
+        </article>
+        <article class="stat-card">
+          <h2>Match coverage</h2>
+          <span>2025-09-20 → 2025-11-02</span>
+        </article>
+        <article class="stat-card">
+          <h2>Zero-shot goalies</h2>
+          <span>8</span>
+        </article>
       </section>
 
-      <section class="panel" aria-labelledby="snapshot-heading">
-        <div class="panel__header">
-          <div>
-            <h2 class="section-title" id="snapshot-heading">Snabböversikt</h2>
-            <p class="panel__description">
-              Nyckeltal för hela datasättet. Alla siffror uppdateras automatiskt när du laddar nya säsonger.
-            </p>
-          </div>
+      <section class="panel">
+        <h2>Season timeline</h2>
+        <div class="controls">
+          <label>
+            Team filter
+            <select id="team-filter">
+              <option value="ALL">All teams</option>
+              <option value="FBC Partille">FBC Partille</option><option value="Fagerhult Habo IBK">Fagerhult Habo IBK</option><option value="Floda IBK">Floda IBK</option><option value="Fristads GoIF">Fristads GoIF</option><option value="IBF Backadalen">IBF Backadalen</option><option value="IBK Alingsås">IBK Alingsås</option><option value="IBK Göteborg">IBK Göteborg</option><option value="IBK Kungälv">IBK Kungälv</option><option value="IBK Lidköping">IBK Lidköping</option><option value="Mullsjö AIS Utveckling">Mullsjö AIS Utveckling</option><option value="Pixbo IBF">Pixbo IBF</option><option value="Särö IBK">Särö IBK</option>
+            </select>
+          </label>
+          <label>
+            Highlight goalie
+            <input id="goalie-search" type="search" placeholder="Search goalie name…" />
+          </label>
+          <button id="reset-view" type="button">Reset view</button>
         </div>
-        <div class="stats-grid">
-          <article class="stat-card">
-            <span class="stat-card__label">Spårade lag</span>
-            <span class="stat-card__value" data-stat="team-count">–</span>
-            <span class="stat-card__meta">Antal med minst en aktiv målvakt</span>
-          </article>
-          <article class="stat-card">
-            <span class="stat-card__label">Registrerade målvakter</span>
-            <span class="stat-card__value" data-stat="goalie-count">–</span>
-            <span class="stat-card__meta">Summan av individuella profiler</span>
-          </article>
-          <article class="stat-card">
-            <span class="stat-card__label">Registrerade skott</span>
-            <span class="stat-card__value" data-stat="shot-volume">–</span>
-            <span class="stat-card__meta">Totalt antal skott mot mål</span>
-          </article>
-          <article class="stat-card">
-            <span class="stat-card__label">Tidsperiod</span>
-            <span class="stat-card__value" data-stat="coverage">–</span>
-            <span class="stat-card__meta">Från första till senaste match</span>
-          </article>
-        </div>
+        <div>                            <div id="savepct-chart" class="plotly-graph-div" style="height:100%; width:100%;"></div>            <script type="text/javascript">                window.PLOTLYENV=window.PLOTLYENV || {};                                if (document.getElementById("savepct-chart")) {                    Plotly.newPlot(                        "savepct-chart",                        [{"customdata":[["Robin Pagoldh (25 \u00e5r)","FBC Partille","1570524",11,14],["Robin Pagoldh (25 \u00e5r)","FBC Partille","1570530",29,36],["Robin Pagoldh (25 \u00e5r)","FBC Partille","1570536",48,61],["Robin Pagoldh (25 \u00e5r)","FBC Partille","1570542",59,78],["Robin Pagoldh (25 \u00e5r)","FBC Partille","1570548",59,78],["Robin Pagoldh (25 \u00e5r)","FBC Partille","1570554",77,99]],"hovertemplate":"\u003cb\u003e%{customdata[0]}\u003c\u002fb\u003e \u2014 %{customdata[1]}\u003cbr\u003eDate: %{x|%Y-%m-%d}\u003cbr\u003eGame: %{customdata[2]}\u003cbr\u003eShots: %{customdata[4]}\u003cbr\u003eSaves: %{customdata[3]}\u003cbr\u003eSave %: %{y:.1%}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"Robin Pagoldh (25 \u00e5r)","line":{"color":"rgb(127, 60, 141)","dash":"solid","shape":"spline","smoothing":0.6,"width":2.5},"marker":{"symbol":"circle","line":{"color":"rgba(15, 23, 42, 0.3)","width":0},"size":7},"mode":"lines+markers","name":"Robin Pagoldh (25 \u00e5r)","orientation":"v","showlegend":true,"x":["2025-09-20T14:00:00.000000000","2025-09-26T19:00:00.000000000","2025-10-01T19:00:00.000000000","2025-10-11T16:00:00.000000000","2025-10-25T14:00:00.000000000","2025-11-01T16:00:00.000000000"],"xaxis":"x","y":[0.7857142857142857,0.8055555555555556,0.7868852459016393,0.7564102564102564,0.7564102564102564,0.7777777777777778],"yaxis":"y","type":"scatter"},{"customdata":[["Liam Eriksson (17 \u00e5r)","IBK Lidk\u00f6ping","1570524",21,27],["Liam Eriksson (17 \u00e5r)","IBK Lidk\u00f6ping","1570528",21,27],["Liam Eriksson (17 \u00e5r)","IBK Lidk\u00f6ping","1570535",21,27],["Liam Eriksson (17 \u00e5r)","IBK Lidk\u00f6ping","1570544",21,27],["Liam Eriksson (17 \u00e5r)","IBK Lidk\u00f6ping","1570549",45,56],["Liam Eriksson (17 \u00e5r)","IBK Lidk\u00f6ping","1570553",45,56]],"hovertemplate":"\u003cb\u003e%{customdata[0]}\u003c\u002fb\u003e \u2014 %{customdata[1]}\u003cbr\u003eDate: %{x|%Y-%m-%d}\u003cbr\u003eGame: %{customdata[2]}\u003cbr\u003eShots: %{customdata[4]}\u003cbr\u003eSaves: %{customdata[3]}\u003cbr\u003eSave %: %{y:.1%}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"Liam Eriksson (17 \u00e5r)","line":{"color":"rgb(17, 165, 121)","dash":"solid","shape":"spline","smoothing":0.6,"width":2.5},"marker":{"symbol":"circle","line":{"color":"rgba(15, 23, 42, 0.3)","width":0},"size":7},"mode":"lines+markers","name":"Liam Eriksson (17 \u00e5r)","orientation":"v","showlegend":true,"x":["2025-09-20T14:00:00.000000000","2025-09-27T14:00:00.000000000","2025-10-04T17:00:00.000000000","2025-10-12T15:00:00.000000000","2025-10-25T14:00:00.000000000","2025-11-01T14:00:00.000000000"],"xaxis":"x","y":[0.7777777777777778,0.7777777777777778,0.7777777777777778,0.7777777777777778,0.8035714285714286,0.8035714285714286],"yaxis":"y","type":"scatter"},{"customdata":[["Phoenix Wigilius (19 \u00e5r)","Floda IBK","1570526",18,20],["Phoenix Wigilius (19 \u00e5r)","Floda IBK","1570532",36,46],["Phoenix Wigilius (19 \u00e5r)","Floda IBK","1570538",36,46],["Phoenix Wigilius (19 \u00e5r)","Floda IBK","1570544",36,46],["Phoenix Wigilius (19 \u00e5r)","Floda IBK","1570556",36,46]],"hovertemplate":"\u003cb\u003e%{customdata[0]}\u003c\u002fb\u003e \u2014 %{customdata[1]}\u003cbr\u003eDate: %{x|%Y-%m-%d}\u003cbr\u003eGame: %{customdata[2]}\u003cbr\u003eShots: %{customdata[4]}\u003cbr\u003eSaves: %{customdata[3]}\u003cbr\u003eSave %: %{y:.1%}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"Phoenix Wigilius (19 \u00e5r)","line":{"color":"rgb(57, 105, 172)","dash":"solid","shape":"spline","smoothing":0.6,"width":2.5},"marker":{"symbol":"circle","line":{"color":"rgba(15, 23, 42, 0.3)","width":0},"size":7},"mode":"lines+markers","name":"Phoenix Wigilius (19 \u00e5r)","orientation":"v","showlegend":true,"x":["2025-09-20T15:00:00.000000000","2025-09-27T16:00:00.000000000","2025-10-04T15:00:00.000000000","2025-10-12T15:00:00.000000000","2025-11-01T15:00:00.000000000"],"xaxis":"x","y":[0.9,0.782608695652174,0.782608695652174,0.782608695652174,0.782608695652174],"yaxis":"y","type":"scatter"},{"customdata":[["Joel Andersson (18 \u00e5r)","Floda IBK","1570526",0,0],["Joel Andersson (18 \u00e5r)","Floda IBK","1570544",29,37],["Joel Andersson (18 \u00e5r)","Floda IBK","1570550",29,37]],"hovertemplate":"\u003cb\u003e%{customdata[0]}\u003c\u002fb\u003e \u2014 %{customdata[1]}\u003cbr\u003eDate: %{x|%Y-%m-%d}\u003cbr\u003eGame: %{customdata[2]}\u003cbr\u003eShots: %{customdata[4]}\u003cbr\u003eSaves: %{customdata[3]}\u003cbr\u003eSave %: %{y:.1%}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"Joel Andersson (18 \u00e5r)","line":{"color":"rgb(242, 183, 1)","dash":"solid","shape":"spline","smoothing":0.6,"width":2.5},"marker":{"symbol":"circle","line":{"color":"rgba(15, 23, 42, 0.3)","width":0},"size":7},"mode":"lines+markers","name":"Joel Andersson (18 \u00e5r)","orientation":"v","showlegend":true,"x":["2025-09-20T15:00:00.000000000","2025-10-12T15:00:00.000000000","2025-10-25T15:00:00.000000000"],"xaxis":"x","y":[null,0.7837837837837838,0.7837837837837838],"yaxis":"y","type":"scatter"},{"customdata":[["Vincent Sohlstr\u00f6m (32 \u00e5r)","IBK Alings\u00e5s","1570526",17,22],["Vincent Sohlstr\u00f6m (32 \u00e5r)","IBK Alings\u00e5s","1570530",19,30],["Vincent Sohlstr\u00f6m (32 \u00e5r)","IBK Alings\u00e5s","1570537",19,30],["Vincent Sohlstr\u00f6m (32 \u00e5r)","IBK Alings\u00e5s","1570540",36,50],["Vincent Sohlstr\u00f6m (32 \u00e5r)","IBK Alings\u00e5s","1570545",36,50],["Vincent Sohlstr\u00f6m (32 \u00e5r)","IBK Alings\u00e5s","1570552",36,50]],"hovertemplate":"\u003cb\u003e%{customdata[0]}\u003c\u002fb\u003e \u2014 %{customdata[1]}\u003cbr\u003eDate: %{x|%Y-%m-%d}\u003cbr\u003eGame: %{customdata[2]}\u003cbr\u003eShots: %{customdata[4]}\u003cbr\u003eSaves: %{customdata[3]}\u003cbr\u003eSave %: %{y:.1%}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"Vincent Sohlstr\u00f6m (32 \u00e5r)","line":{"color":"rgb(231, 63, 116)","dash":"solid","shape":"spline","smoothing":0.6,"width":2.5},"marker":{"symbol":"circle","line":{"color":"rgba(15, 23, 42, 0.3)","width":0},"size":7},"mode":"lines+markers","name":"Vincent Sohlstr\u00f6m (32 \u00e5r)","orientation":"v","showlegend":true,"x":["2025-09-20T15:00:00.000000000","2025-09-26T19:00:00.000000000","2025-10-04T16:45:00.000000000","2025-10-11T14:00:00.000000000","2025-10-25T15:15:00.000000000","2025-10-30T19:00:00.000000000"],"xaxis":"x","y":[0.7727272727272727,0.6333333333333333,0.6333333333333333,0.72,0.72,0.72],"yaxis":"y","type":"scatter"},{"customdata":[["Albin Fl\u00f6jner (21 \u00e5r)","IBK Alings\u00e5s","1570526",0,0],["Albin Fl\u00f6jner (21 \u00e5r)","IBK Alings\u00e5s","1570530",4,10],["Albin Fl\u00f6jner (21 \u00e5r)","IBK Alings\u00e5s","1570537",17,32],["Albin Fl\u00f6jner (21 \u00e5r)","IBK Alings\u00e5s","1570540",17,32],["Albin Fl\u00f6jner (21 \u00e5r)","IBK Alings\u00e5s","1570545",17,32],["Albin Fl\u00f6jner (21 \u00e5r)","IBK Alings\u00e5s","1570552",17,32]],"hovertemplate":"\u003cb\u003e%{customdata[0]}\u003c\u002fb\u003e \u2014 %{customdata[1]}\u003cbr\u003eDate: %{x|%Y-%m-%d}\u003cbr\u003eGame: %{customdata[2]}\u003cbr\u003eShots: %{customdata[4]}\u003cbr\u003eSaves: %{customdata[3]}\u003cbr\u003eSave %: %{y:.1%}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"Albin Fl\u00f6jner (21 \u00e5r)","line":{"color":"rgb(128, 186, 90)","dash":"solid","shape":"spline","smoothing":0.6,"width":2.5},"marker":{"symbol":"circle","line":{"color":"rgba(15, 23, 42, 0.3)","width":0},"size":7},"mode":"lines+markers","name":"Albin Fl\u00f6jner (21 \u00e5r)","orientation":"v","showlegend":true,"x":["2025-09-20T15:00:00.000000000","2025-09-26T19:00:00.000000000","2025-10-04T16:45:00.000000000","2025-10-11T14:00:00.000000000","2025-10-25T15:15:00.000000000","2025-10-30T19:00:00.000000000"],"xaxis":"x","y":[null,0.4,0.53125,0.53125,0.53125,0.53125],"yaxis":"y","type":"scatter"},{"customdata":[["Martinus Martinsson (21 \u00e5r)","IBK G\u00f6teborg","1570521",0,0],["Martinus Martinsson (21 \u00e5r)","IBK G\u00f6teborg","1570527",5,7],["Martinus Martinsson (21 \u00e5r)","IBK G\u00f6teborg","1570533",5,7],["Martinus Martinsson (21 \u00e5r)","IBK G\u00f6teborg","1570539",5,7],["Martinus Martinsson (21 \u00e5r)","IBK G\u00f6teborg","1570545",19,29],["Martinus Martinsson (21 \u00e5r)","IBK G\u00f6teborg","1570553",19,29]],"hovertemplate":"\u003cb\u003e%{customdata[0]}\u003c\u002fb\u003e \u2014 %{customdata[1]}\u003cbr\u003eDate: %{x|%Y-%m-%d}\u003cbr\u003eGame: %{customdata[2]}\u003cbr\u003eShots: %{customdata[4]}\u003cbr\u003eSaves: %{customdata[3]}\u003cbr\u003eSave %: %{y:.1%}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"Martinus Martinsson (21 \u00e5r)","line":{"color":"rgb(230, 131, 16)","dash":"solid","shape":"spline","smoothing":0.6,"width":2.5},"marker":{"symbol":"circle","line":{"color":"rgba(15, 23, 42, 0.3)","width":0},"size":7},"mode":"lines+markers","name":"Martinus Martinsson (21 \u00e5r)","orientation":"v","showlegend":true,"x":["2025-09-20T15:15:00.000000000","2025-09-24T19:00:00.000000000","2025-10-03T19:00:00.000000000","2025-10-12T14:30:00.000000000","2025-10-25T15:15:00.000000000","2025-11-01T14:00:00.000000000"],"xaxis":"x","y":[null,0.7142857142857143,0.7142857142857143,0.7142857142857143,0.6551724137931034,0.6551724137931034],"yaxis":"y","type":"scatter"},{"customdata":[["Oskar Adler (31 \u00e5r)","IBK G\u00f6teborg","1570521",18,23],["Oskar Adler (31 \u00e5r)","IBK G\u00f6teborg","1570527",28,40],["Oskar Adler (31 \u00e5r)","IBK G\u00f6teborg","1570533",28,40],["Oskar Adler (31 \u00e5r)","IBK G\u00f6teborg","1570539",28,40],["Oskar Adler (31 \u00e5r)","IBK G\u00f6teborg","1570545",28,40],["Oskar Adler (31 \u00e5r)","IBK G\u00f6teborg","1570553",55,76]],"hovertemplate":"\u003cb\u003e%{customdata[0]}\u003c\u002fb\u003e \u2014 %{customdata[1]}\u003cbr\u003eDate: %{x|%Y-%m-%d}\u003cbr\u003eGame: %{customdata[2]}\u003cbr\u003eShots: %{customdata[4]}\u003cbr\u003eSaves: %{customdata[3]}\u003cbr\u003eSave %: %{y:.1%}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"Oskar Adler (31 \u00e5r)","line":{"color":"rgb(0, 134, 149)","dash":"solid","shape":"spline","smoothing":0.6,"width":2.5},"marker":{"symbol":"circle","line":{"color":"rgba(15, 23, 42, 0.3)","width":0},"size":7},"mode":"lines+markers","name":"Oskar Adler (31 \u00e5r)","orientation":"v","showlegend":true,"x":["2025-09-20T15:15:00.000000000","2025-09-24T19:00:00.000000000","2025-10-03T19:00:00.000000000","2025-10-12T14:30:00.000000000","2025-10-25T15:15:00.000000000","2025-11-01T14:00:00.000000000"],"xaxis":"x","y":[0.782608695652174,0.7,0.7,0.7,0.7,0.7236842105263158],"yaxis":"y","type":"scatter"},{"customdata":[["Erik Christoffersson (22 \u00e5r)","Fristads GoIF","1570521",15,17],["Erik Christoffersson (22 \u00e5r)","Fristads GoIF","1570531",55,60],["Erik Christoffersson (22 \u00e5r)","Fristads GoIF","1570534",55,60],["Erik Christoffersson (22 \u00e5r)","Fristads GoIF","1570541",70,80],["Erik Christoffersson (22 \u00e5r)","Fristads GoIF","1570548",70,80],["Erik Christoffersson (22 \u00e5r)","Fristads GoIF","1570556",104,119]],"hovertemplate":"\u003cb\u003e%{customdata[0]}\u003c\u002fb\u003e \u2014 %{customdata[1]}\u003cbr\u003eDate: %{x|%Y-%m-%d}\u003cbr\u003eGame: %{customdata[2]}\u003cbr\u003eShots: %{customdata[4]}\u003cbr\u003eSaves: %{customdata[3]}\u003cbr\u003eSave %: %{y:.1%}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"Erik Christoffersson (22 \u00e5r)","line":{"color":"rgb(207, 28, 144)","dash":"solid","shape":"spline","smoothing":0.6,"width":2.5},"marker":{"symbol":"circle","line":{"color":"rgba(15, 23, 42, 0.3)","width":0},"size":7},"mode":"lines+markers","name":"Erik Christoffersson (22 \u00e5r)","orientation":"v","showlegend":true,"x":["2025-09-20T15:15:00.000000000","2025-09-28T17:15:00.000000000","2025-10-05T16:30:00.000000000","2025-10-11T15:00:00.000000000","2025-10-25T14:00:00.000000000","2025-11-01T15:00:00.000000000"],"xaxis":"x","y":[0.8823529411764706,0.9166666666666666,0.9166666666666666,0.875,0.875,0.8739495798319328],"yaxis":"y","type":"scatter"},{"customdata":[["Simon Kure (22 \u00e5r)","S\u00e4r\u00f6 IBK","1570523",0,0],["Simon Kure (22 \u00e5r)","S\u00e4r\u00f6 IBK","1570529",0,0],["Simon Kure (22 \u00e5r)","S\u00e4r\u00f6 IBK","1570535",0,0],["Simon Kure (22 \u00e5r)","S\u00e4r\u00f6 IBK","1570541",24,32],["Simon Kure (22 \u00e5r)","S\u00e4r\u00f6 IBK","1570547",37,52],["Simon Kure (22 \u00e5r)","S\u00e4r\u00f6 IBK","1570552",37,52]],"hovertemplate":"\u003cb\u003e%{customdata[0]}\u003c\u002fb\u003e \u2014 %{customdata[1]}\u003cbr\u003eDate: %{x|%Y-%m-%d}\u003cbr\u003eGame: %{customdata[2]}\u003cbr\u003eShots: %{customdata[4]}\u003cbr\u003eSaves: %{customdata[3]}\u003cbr\u003eSave %: %{y:.1%}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"Simon Kure (22 \u00e5r)","line":{"color":"rgb(249, 123, 114)","dash":"solid","shape":"spline","smoothing":0.6,"width":2.5},"marker":{"symbol":"circle","line":{"color":"rgba(15, 23, 42, 0.3)","width":0},"size":7},"mode":"lines+markers","name":"Simon Kure (22 \u00e5r)","orientation":"v","showlegend":true,"x":["2025-09-20T17:00:00.000000000","2025-09-28T12:30:00.000000000","2025-10-04T17:00:00.000000000","2025-10-11T15:00:00.000000000","2025-10-25T17:00:00.000000000","2025-10-30T19:00:00.000000000"],"xaxis":"x","y":[null,null,null,0.75,0.7115384615384616,0.7115384615384616],"yaxis":"y","type":"scatter"},{"customdata":[["Elmer Arne (18 \u00e5r)","Pixbo IBF","1570523",0,0],["Elmer Arne (18 \u00e5r)","Pixbo IBF","1570527",21,26],["Elmer Arne (18 \u00e5r)","Pixbo IBF","1570536",43,52],["Elmer Arne (18 \u00e5r)","Pixbo IBF","1570543",64,78],["Elmer Arne (18 \u00e5r)","Pixbo IBF","1570550",64,78],["Elmer Arne (18 \u00e5r)","Pixbo IBF","1570551",64,78]],"hovertemplate":"\u003cb\u003e%{customdata[0]}\u003c\u002fb\u003e \u2014 %{customdata[1]}\u003cbr\u003eDate: %{x|%Y-%m-%d}\u003cbr\u003eGame: %{customdata[2]}\u003cbr\u003eShots: %{customdata[4]}\u003cbr\u003eSaves: %{customdata[3]}\u003cbr\u003eSave %: %{y:.1%}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"Elmer Arne (18 \u00e5r)","line":{"color":"rgb(165, 170, 153)","dash":"solid","shape":"spline","smoothing":0.6,"width":2.5},"marker":{"symbol":"circle","line":{"color":"rgba(15, 23, 42, 0.3)","width":0},"size":7},"mode":"lines+markers","name":"Elmer Arne (18 \u00e5r)","orientation":"v","showlegend":true,"x":["2025-09-20T17:00:00.000000000","2025-09-24T19:00:00.000000000","2025-10-01T19:00:00.000000000","2025-10-12T18:00:00.000000000","2025-10-25T15:00:00.000000000","2025-11-02T18:00:00.000000000"],"xaxis":"x","y":[null,0.8076923076923077,0.8269230769230769,0.8205128205128205,0.8205128205128205,0.8205128205128205],"yaxis":"y","type":"scatter"},{"customdata":[["Oscar Larsson (21 \u00e5r)","IBF Backadalen","1570525",24,29],["Oscar Larsson (21 \u00e5r)","IBF Backadalen","1570531",42,56],["Oscar Larsson (21 \u00e5r)","IBF Backadalen","1570543",61,81]],"hovertemplate":"\u003cb\u003e%{customdata[0]}\u003c\u002fb\u003e \u2014 %{customdata[1]}\u003cbr\u003eDate: %{x|%Y-%m-%d}\u003cbr\u003eGame: %{customdata[2]}\u003cbr\u003eShots: %{customdata[4]}\u003cbr\u003eSaves: %{customdata[3]}\u003cbr\u003eSave %: %{y:.1%}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"Oscar Larsson (21 \u00e5r)","line":{"color":"rgb(127, 60, 141)","dash":"solid","shape":"spline","smoothing":0.6,"width":2.5},"marker":{"symbol":"circle","line":{"color":"rgba(15, 23, 42, 0.3)","width":0},"size":7},"mode":"lines+markers","name":"Oscar Larsson (21 \u00e5r)","orientation":"v","showlegend":true,"x":["2025-09-20T17:00:00.000000000","2025-09-28T17:15:00.000000000","2025-10-12T18:00:00.000000000"],"xaxis":"x","y":[0.8275862068965517,0.75,0.7530864197530864],"yaxis":"y","type":"scatter"},{"customdata":[["Kasper Landstr\u00f6m (19 \u00e5r)","IBF Backadalen","1570525",0,0],["Kasper Landstr\u00f6m (19 \u00e5r)","IBF Backadalen","1570531",0,0],["Kasper Landstr\u00f6m (19 \u00e5r)","IBF Backadalen","1570537",0,0],["Kasper Landstr\u00f6m (19 \u00e5r)","IBF Backadalen","1570543",10,14],["Kasper Landstr\u00f6m (19 \u00e5r)","IBF Backadalen","1570549",10,14],["Kasper Landstr\u00f6m (19 \u00e5r)","IBF Backadalen","1570555",10,14]],"hovertemplate":"\u003cb\u003e%{customdata[0]}\u003c\u002fb\u003e \u2014 %{customdata[1]}\u003cbr\u003eDate: %{x|%Y-%m-%d}\u003cbr\u003eGame: %{customdata[2]}\u003cbr\u003eShots: %{customdata[4]}\u003cbr\u003eSaves: %{customdata[3]}\u003cbr\u003eSave %: %{y:.1%}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"Kasper Landstr\u00f6m (19 \u00e5r)","line":{"color":"rgb(17, 165, 121)","dash":"solid","shape":"spline","smoothing":0.6,"width":2.5},"marker":{"symbol":"circle","line":{"color":"rgba(15, 23, 42, 0.3)","width":0},"size":7},"mode":"lines+markers","name":"Kasper Landstr\u00f6m (19 \u00e5r)","orientation":"v","showlegend":true,"x":["2025-09-20T17:00:00.000000000","2025-09-28T17:15:00.000000000","2025-10-04T16:45:00.000000000","2025-10-12T18:00:00.000000000","2025-10-25T14:00:00.000000000","2025-11-01T14:00:00.000000000"],"xaxis":"x","y":[null,null,null,0.7142857142857143,0.7142857142857143,0.7142857142857143],"yaxis":"y","type":"scatter"},{"customdata":[["David Vik (29 \u00e5r)","Mullsj\u00f6 AIS Utveckling","1570525",11,19],["David Vik (29 \u00e5r)","Mullsj\u00f6 AIS Utveckling","1570539",11,19]],"hovertemplate":"\u003cb\u003e%{customdata[0]}\u003c\u002fb\u003e \u2014 %{customdata[1]}\u003cbr\u003eDate: %{x|%Y-%m-%d}\u003cbr\u003eGame: %{customdata[2]}\u003cbr\u003eShots: %{customdata[4]}\u003cbr\u003eSaves: %{customdata[3]}\u003cbr\u003eSave %: %{y:.1%}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"David Vik (29 \u00e5r)","line":{"color":"rgb(57, 105, 172)","dash":"solid","shape":"spline","smoothing":0.6,"width":2.5},"marker":{"symbol":"circle","line":{"color":"rgba(15, 23, 42, 0.3)","width":0},"size":7},"mode":"lines+markers","name":"David Vik (29 \u00e5r)","orientation":"v","showlegend":true,"x":["2025-09-20T17:00:00.000000000","2025-10-12T14:30:00.000000000"],"xaxis":"x","y":[0.5789473684210527,0.5789473684210527],"yaxis":"y","type":"scatter"},{"customdata":[["Elliot J\u00e4rn (19 \u00e5r)","Mullsj\u00f6 AIS Utveckling","1570525",0,0],["Elliot J\u00e4rn (19 \u00e5r)","Mullsj\u00f6 AIS Utveckling","1570529",0,0],["Elliot J\u00e4rn (19 \u00e5r)","Mullsj\u00f6 AIS Utveckling","1570538",0,0],["Elliot J\u00e4rn (19 \u00e5r)","Mullsj\u00f6 AIS Utveckling","1570539",16,22],["Elliot J\u00e4rn (19 \u00e5r)","Mullsj\u00f6 AIS Utveckling","1570546",38,52],["Elliot J\u00e4rn (19 \u00e5r)","Mullsj\u00f6 AIS Utveckling","1570554",38,52]],"hovertemplate":"\u003cb\u003e%{customdata[0]}\u003c\u002fb\u003e \u2014 %{customdata[1]}\u003cbr\u003eDate: %{x|%Y-%m-%d}\u003cbr\u003eGame: %{customdata[2]}\u003cbr\u003eShots: %{customdata[4]}\u003cbr\u003eSaves: %{customdata[3]}\u003cbr\u003eSave %: %{y:.1%}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"Elliot J\u00e4rn (19 \u00e5r)","line":{"color":"rgb(242, 183, 1)","dash":"solid","shape":"spline","smoothing":0.6,"width":2.5},"marker":{"symbol":"circle","line":{"color":"rgba(15, 23, 42, 0.3)","width":0},"size":7},"mode":"lines+markers","name":"Elliot J\u00e4rn (19 \u00e5r)","orientation":"v","showlegend":true,"x":["2025-09-20T17:00:00.000000000","2025-09-28T12:30:00.000000000","2025-10-04T15:00:00.000000000","2025-10-12T14:30:00.000000000","2025-10-25T15:00:00.000000000","2025-11-01T16:00:00.000000000"],"xaxis":"x","y":[null,null,null,0.7272727272727273,0.7307692307692307,0.7307692307692307],"yaxis":"y","type":"scatter"},{"customdata":[["Johan Svensson (30 \u00e5r)","IBK Kung\u00e4lv","1570522",0,0],["Johan Svensson (30 \u00e5r)","IBK Kung\u00e4lv","1570528",0,0],["Johan Svensson (30 \u00e5r)","IBK Kung\u00e4lv","1570540",0,0],["Johan Svensson (30 \u00e5r)","IBK Kung\u00e4lv","1570546",26,35],["Johan Svensson (30 \u00e5r)","IBK Kung\u00e4lv","1570551",26,35]],"hovertemplate":"\u003cb\u003e%{customdata[0]}\u003c\u002fb\u003e \u2014 %{customdata[1]}\u003cbr\u003eDate: %{x|%Y-%m-%d}\u003cbr\u003eGame: %{customdata[2]}\u003cbr\u003eShots: %{customdata[4]}\u003cbr\u003eSaves: %{customdata[3]}\u003cbr\u003eSave %: %{y:.1%}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"Johan Svensson (30 \u00e5r)","line":{"color":"rgb(231, 63, 116)","dash":"solid","shape":"spline","smoothing":0.6,"width":2.5},"marker":{"symbol":"circle","line":{"color":"rgba(15, 23, 42, 0.3)","width":0},"size":7},"mode":"lines+markers","name":"Johan Svensson (30 \u00e5r)","orientation":"v","showlegend":true,"x":["2025-09-21T16:30:00.000000000","2025-09-27T14:00:00.000000000","2025-10-11T14:00:00.000000000","2025-10-25T15:00:00.000000000","2025-11-02T18:00:00.000000000"],"xaxis":"x","y":[null,null,null,0.7428571428571429,0.7428571428571429],"yaxis":"y","type":"scatter"},{"customdata":[["Johan Ljungberg (29 \u00e5r)","IBK Kung\u00e4lv","1570522",0,0],["Johan Ljungberg (29 \u00e5r)","IBK Kung\u00e4lv","1570528",33,44],["Johan Ljungberg (29 \u00e5r)","IBK Kung\u00e4lv","1570534",33,44],["Johan Ljungberg (29 \u00e5r)","IBK Kung\u00e4lv","1570540",49,70],["Johan Ljungberg (29 \u00e5r)","IBK Kung\u00e4lv","1570546",49,70],["Johan Ljungberg (29 \u00e5r)","IBK Kung\u00e4lv","1570551",49,70]],"hovertemplate":"\u003cb\u003e%{customdata[0]}\u003c\u002fb\u003e \u2014 %{customdata[1]}\u003cbr\u003eDate: %{x|%Y-%m-%d}\u003cbr\u003eGame: %{customdata[2]}\u003cbr\u003eShots: %{customdata[4]}\u003cbr\u003eSaves: %{customdata[3]}\u003cbr\u003eSave %: %{y:.1%}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"Johan Ljungberg (29 \u00e5r)","line":{"color":"rgb(128, 186, 90)","dash":"solid","shape":"spline","smoothing":0.6,"width":2.5},"marker":{"symbol":"circle","line":{"color":"rgba(15, 23, 42, 0.3)","width":0},"size":7},"mode":"lines+markers","name":"Johan Ljungberg (29 \u00e5r)","orientation":"v","showlegend":true,"x":["2025-09-21T16:30:00.000000000","2025-09-27T14:00:00.000000000","2025-10-05T16:30:00.000000000","2025-10-11T14:00:00.000000000","2025-10-25T15:00:00.000000000","2025-11-02T18:00:00.000000000"],"xaxis":"x","y":[null,0.75,0.75,0.7,0.7,0.7],"yaxis":"y","type":"scatter"},{"customdata":[["Alvin Eckert (18 \u00e5r)","Fagerhult Habo IBK","1570522",0,0],["Alvin Eckert (18 \u00e5r)","Fagerhult Habo IBK","1570532",6,9],["Alvin Eckert (18 \u00e5r)","Fagerhult Habo IBK","1570533",6,9],["Alvin Eckert (18 \u00e5r)","Fagerhult Habo IBK","1570542",6,9],["Alvin Eckert (18 \u00e5r)","Fagerhult Habo IBK","1570547",15,19],["Alvin Eckert (18 \u00e5r)","Fagerhult Habo IBK","1570555",15,19]],"hovertemplate":"\u003cb\u003e%{customdata[0]}\u003c\u002fb\u003e \u2014 %{customdata[1]}\u003cbr\u003eDate: %{x|%Y-%m-%d}\u003cbr\u003eGame: %{customdata[2]}\u003cbr\u003eShots: %{customdata[4]}\u003cbr\u003eSaves: %{customdata[3]}\u003cbr\u003eSave %: %{y:.1%}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"Alvin Eckert (18 \u00e5r)","line":{"color":"rgb(230, 131, 16)","dash":"solid","shape":"spline","smoothing":0.6,"width":2.5},"marker":{"symbol":"circle","line":{"color":"rgba(15, 23, 42, 0.3)","width":0},"size":7},"mode":"lines+markers","name":"Alvin Eckert (18 \u00e5r)","orientation":"v","showlegend":true,"x":["2025-09-21T16:30:00.000000000","2025-09-27T16:00:00.000000000","2025-10-03T19:00:00.000000000","2025-10-11T16:00:00.000000000","2025-10-25T17:00:00.000000000","2025-11-01T14:00:00.000000000"],"xaxis":"x","y":[null,0.6666666666666666,0.6666666666666666,0.6666666666666666,0.7894736842105263,0.7894736842105263],"yaxis":"y","type":"scatter"},{"customdata":[["Johan Ringqvist (27 \u00e5r)","Fagerhult Habo IBK","1570522",0,0],["Johan Ringqvist (27 \u00e5r)","Fagerhult Habo IBK","1570532",0,0],["Johan Ringqvist (27 \u00e5r)","Fagerhult Habo IBK","1570533",0,0],["Johan Ringqvist (27 \u00e5r)","Fagerhult Habo IBK","1570542",8,13],["Johan Ringqvist (27 \u00e5r)","Fagerhult Habo IBK","1570547",8,13],["Johan Ringqvist (27 \u00e5r)","Fagerhult Habo IBK","1570555",8,13]],"hovertemplate":"\u003cb\u003e%{customdata[0]}\u003c\u002fb\u003e \u2014 %{customdata[1]}\u003cbr\u003eDate: %{x|%Y-%m-%d}\u003cbr\u003eGame: %{customdata[2]}\u003cbr\u003eShots: %{customdata[4]}\u003cbr\u003eSaves: %{customdata[3]}\u003cbr\u003eSave %: %{y:.1%}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"Johan Ringqvist (27 \u00e5r)","line":{"color":"rgb(0, 134, 149)","dash":"solid","shape":"spline","smoothing":0.6,"width":2.5},"marker":{"symbol":"circle","line":{"color":"rgba(15, 23, 42, 0.3)","width":0},"size":7},"mode":"lines+markers","name":"Johan Ringqvist (27 \u00e5r)","orientation":"v","showlegend":true,"x":["2025-09-21T16:30:00.000000000","2025-09-27T16:00:00.000000000","2025-10-03T19:00:00.000000000","2025-10-11T16:00:00.000000000","2025-10-25T17:00:00.000000000","2025-11-01T14:00:00.000000000"],"xaxis":"x","y":[null,null,null,0.6153846153846154,0.6153846153846154,0.6153846153846154],"yaxis":"y","type":"scatter"},{"customdata":[["Emil Lundberg (25 \u00e5r)","IBK Lidk\u00f6ping","1570528",31,38],["Emil Lundberg (25 \u00e5r)","IBK Lidk\u00f6ping","1570535",31,38],["Emil Lundberg (25 \u00e5r)","IBK Lidk\u00f6ping","1570544",48,60],["Emil Lundberg (25 \u00e5r)","IBK Lidk\u00f6ping","1570549",48,60],["Emil Lundberg (25 \u00e5r)","IBK Lidk\u00f6ping","1570553",69,87]],"hovertemplate":"\u003cb\u003e%{customdata[0]}\u003c\u002fb\u003e \u2014 %{customdata[1]}\u003cbr\u003eDate: %{x|%Y-%m-%d}\u003cbr\u003eGame: %{customdata[2]}\u003cbr\u003eShots: %{customdata[4]}\u003cbr\u003eSaves: %{customdata[3]}\u003cbr\u003eSave %: %{y:.1%}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"Emil Lundberg (25 \u00e5r)","line":{"color":"rgb(207, 28, 144)","dash":"solid","shape":"spline","smoothing":0.6,"width":2.5},"marker":{"symbol":"circle","line":{"color":"rgba(15, 23, 42, 0.3)","width":0},"size":7},"mode":"lines+markers","name":"Emil Lundberg (25 \u00e5r)","orientation":"v","showlegend":true,"x":["2025-09-27T14:00:00.000000000","2025-10-04T17:00:00.000000000","2025-10-12T15:00:00.000000000","2025-10-25T14:00:00.000000000","2025-11-01T14:00:00.000000000"],"xaxis":"x","y":[0.8157894736842105,0.8157894736842105,0.8,0.8,0.7931034482758621],"yaxis":"y","type":"scatter"},{"customdata":[["Isak Dorell (22 \u00e5r)","Mullsj\u00f6 AIS Utveckling","1570529",0,0],["Isak Dorell (22 \u00e5r)","Mullsj\u00f6 AIS Utveckling","1570538",0,0],["Isak Dorell (22 \u00e5r)","Mullsj\u00f6 AIS Utveckling","1570546",0,0],["Isak Dorell (22 \u00e5r)","Mullsj\u00f6 AIS Utveckling","1570554",14,20]],"hovertemplate":"\u003cb\u003e%{customdata[0]}\u003c\u002fb\u003e \u2014 %{customdata[1]}\u003cbr\u003eDate: %{x|%Y-%m-%d}\u003cbr\u003eGame: %{customdata[2]}\u003cbr\u003eShots: %{customdata[4]}\u003cbr\u003eSaves: %{customdata[3]}\u003cbr\u003eSave %: %{y:.1%}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"Isak Dorell (22 \u00e5r)","line":{"color":"rgb(249, 123, 114)","dash":"solid","shape":"spline","smoothing":0.6,"width":2.5},"marker":{"symbol":"circle","line":{"color":"rgba(15, 23, 42, 0.3)","width":0},"size":7},"mode":"lines+markers","name":"Isak Dorell (22 \u00e5r)","orientation":"v","showlegend":true,"x":["2025-09-28T12:30:00.000000000","2025-10-04T15:00:00.000000000","2025-10-25T15:00:00.000000000","2025-11-01T16:00:00.000000000"],"xaxis":"x","y":[null,null,null,0.7],"yaxis":"y","type":"scatter"},{"customdata":[["Kalle Lundgren (25 \u00e5r)","Floda IBK","1570538",0,0],["Kalle Lundgren (25 \u00e5r)","Floda IBK","1570550",0,0],["Kalle Lundgren (25 \u00e5r)","Floda IBK","1570556",20,23]],"hovertemplate":"\u003cb\u003e%{customdata[0]}\u003c\u002fb\u003e \u2014 %{customdata[1]}\u003cbr\u003eDate: %{x|%Y-%m-%d}\u003cbr\u003eGame: %{customdata[2]}\u003cbr\u003eShots: %{customdata[4]}\u003cbr\u003eSaves: %{customdata[3]}\u003cbr\u003eSave %: %{y:.1%}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"Kalle Lundgren (25 \u00e5r)","line":{"color":"rgb(165, 170, 153)","dash":"solid","shape":"spline","smoothing":0.6,"width":2.5},"marker":{"symbol":"circle","line":{"color":"rgba(15, 23, 42, 0.3)","width":0},"size":7},"mode":"lines+markers","name":"Kalle Lundgren (25 \u00e5r)","orientation":"v","showlegend":true,"x":["2025-10-04T15:00:00.000000000","2025-10-25T15:00:00.000000000","2025-11-01T15:00:00.000000000"],"xaxis":"x","y":[null,null,0.8695652173913043],"yaxis":"y","type":"scatter"},{"customdata":[["Lukas K\u00e4llstr\u00f6m (25 \u00e5r)","IBF Backadalen","1570537",35,43],["Lukas K\u00e4llstr\u00f6m (25 \u00e5r)","IBF Backadalen","1570549",89,97],["Lukas K\u00e4llstr\u00f6m (25 \u00e5r)","IBF Backadalen","1570555",89,97]],"hovertemplate":"\u003cb\u003e%{customdata[0]}\u003c\u002fb\u003e \u2014 %{customdata[1]}\u003cbr\u003eDate: %{x|%Y-%m-%d}\u003cbr\u003eGame: %{customdata[2]}\u003cbr\u003eShots: %{customdata[4]}\u003cbr\u003eSaves: %{customdata[3]}\u003cbr\u003eSave %: %{y:.1%}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"Lukas K\u00e4llstr\u00f6m (25 \u00e5r)","line":{"color":"rgb(127, 60, 141)","dash":"solid","shape":"spline","smoothing":0.6,"width":2.5},"marker":{"symbol":"circle","line":{"color":"rgba(15, 23, 42, 0.3)","width":0},"size":7},"mode":"lines+markers","name":"Lukas K\u00e4llstr\u00f6m (25 \u00e5r)","orientation":"v","showlegend":true,"x":["2025-10-04T16:45:00.000000000","2025-10-25T14:00:00.000000000","2025-11-01T14:00:00.000000000"],"xaxis":"x","y":[0.813953488372093,0.9175257731958762,0.9175257731958762],"yaxis":"y","type":"scatter"}],                        {"template":{"data":{"histogram2dcontour":[{"type":"histogram2dcontour","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"choropleth":[{"type":"choropleth","colorbar":{"outlinewidth":0,"ticks":""}}],"histogram2d":[{"type":"histogram2d","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"heatmap":[{"type":"heatmap","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"contourcarpet":[{"type":"contourcarpet","colorbar":{"outlinewidth":0,"ticks":""}}],"contour":[{"type":"contour","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"surface":[{"type":"surface","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"mesh3d":[{"type":"mesh3d","colorbar":{"outlinewidth":0,"ticks":""}}],"scatter":[{"fillpattern":{"fillmode":"overlay","size":10,"solidity":0.2},"type":"scatter"}],"parcoords":[{"type":"parcoords","line":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterpolargl":[{"type":"scatterpolargl","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"bar":[{"error_x":{"color":"#2a3f5f"},"error_y":{"color":"#2a3f5f"},"marker":{"line":{"color":"#E5ECF6","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"bar"}],"scattergeo":[{"type":"scattergeo","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterpolar":[{"type":"scatterpolar","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"histogram":[{"marker":{"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"histogram"}],"scattergl":[{"type":"scattergl","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatter3d":[{"type":"scatter3d","line":{"colorbar":{"outlinewidth":0,"ticks":""}},"marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattermap":[{"type":"scattermap","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattermapbox":[{"type":"scattermapbox","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterternary":[{"type":"scatterternary","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattercarpet":[{"type":"scattercarpet","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"carpet":[{"aaxis":{"endlinecolor":"#2a3f5f","gridcolor":"white","linecolor":"white","minorgridcolor":"white","startlinecolor":"#2a3f5f"},"baxis":{"endlinecolor":"#2a3f5f","gridcolor":"white","linecolor":"white","minorgridcolor":"white","startlinecolor":"#2a3f5f"},"type":"carpet"}],"table":[{"cells":{"fill":{"color":"#EBF0F8"},"line":{"color":"white"}},"header":{"fill":{"color":"#C8D4E3"},"line":{"color":"white"}},"type":"table"}],"barpolar":[{"marker":{"line":{"color":"#E5ECF6","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"barpolar"}],"pie":[{"automargin":true,"type":"pie"}]},"layout":{"autotypenumbers":"strict","colorway":["#636efa","#EF553B","#00cc96","#ab63fa","#FFA15A","#19d3f3","#FF6692","#B6E880","#FF97FF","#FECB52"],"font":{"color":"#2a3f5f"},"hovermode":"closest","hoverlabel":{"align":"left"},"paper_bgcolor":"white","plot_bgcolor":"#E5ECF6","polar":{"bgcolor":"#E5ECF6","angularaxis":{"gridcolor":"white","linecolor":"white","ticks":""},"radialaxis":{"gridcolor":"white","linecolor":"white","ticks":""}},"ternary":{"bgcolor":"#E5ECF6","aaxis":{"gridcolor":"white","linecolor":"white","ticks":""},"baxis":{"gridcolor":"white","linecolor":"white","ticks":""},"caxis":{"gridcolor":"white","linecolor":"white","ticks":""}},"coloraxis":{"colorbar":{"outlinewidth":0,"ticks":""}},"colorscale":{"sequential":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"sequentialminus":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"diverging":[[0,"#8e0152"],[0.1,"#c51b7d"],[0.2,"#de77ae"],[0.3,"#f1b6da"],[0.4,"#fde0ef"],[0.5,"#f7f7f7"],[0.6,"#e6f5d0"],[0.7,"#b8e186"],[0.8,"#7fbc41"],[0.9,"#4d9221"],[1,"#276419"]]},"xaxis":{"gridcolor":"white","linecolor":"white","ticks":"","title":{"standoff":15},"zerolinecolor":"white","automargin":true,"zerolinewidth":2},"yaxis":{"gridcolor":"white","linecolor":"white","ticks":"","title":{"standoff":15},"zerolinecolor":"white","automargin":true,"zerolinewidth":2},"scene":{"xaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2},"yaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2},"zaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2}},"shapedefaults":{"line":{"color":"#2a3f5f"}},"annotationdefaults":{"arrowcolor":"#2a3f5f","arrowhead":0,"arrowwidth":1},"geo":{"bgcolor":"white","landcolor":"#E5ECF6","subunitcolor":"white","showland":true,"showlakes":true,"lakecolor":"white"},"title":{"x":0.05},"mapbox":{"style":"light"}}},"xaxis":{"anchor":"y","domain":[0.0,1.0],"title":{"text":"Date"},"rangeslider":{"visible":true,"bgcolor":"rgba(148, 163, 184, 0.25)"},"showgrid":true,"gridcolor":"rgba(148, 163, 184, 0.25)","zeroline":false,"linecolor":"rgba(148, 163, 184, 0.5)"},"yaxis":{"anchor":"x","domain":[0.0,1.0],"title":{"text":"Cumulative Save %"},"tickformat":".0%","rangemode":"tozero","showgrid":true,"gridcolor":"rgba(148, 163, 184, 0.2)","linecolor":"rgba(148, 163, 184, 0.5)"},"legend":{"title":{"text":"Goalie"},"tracegroupgap":0,"orientation":"h","yanchor":"bottom","y":1.02,"xanchor":"right","x":1.0,"bgcolor":"rgba(15, 23, 42, 0.05)"},"margin":{"t":80,"r":24,"b":80,"l":60},"font":{"family":"Inter, sans-serif"},"hoverlabel":{"font":{"color":"#f8fafc"},"bgcolor":"rgba(15, 23, 42, 0.85)"},"title":{"text":"Goalie cumulative save percentage over time"},"hovermode":"x unified","plot_bgcolor":"rgba(248, 250, 252, 0.98)","paper_bgcolor":"rgba(15, 23, 42, 0)"},                        {"displaylogo": false, "responsive": true, "modeBarButtonsToRemove": ["lasso2d", "select2d"]}                    )                };            </script>        </div>
+        <div class="callout" role="status">  <h3>Filtered goalies (0 recorded shots)</h3>  <ul><li>Adrian Moghaddam (16 år)</li><li>Albin Lidefelt (16 år)</li><li>Anton Fogelberg (15 år)</li><li>Hampus Eriksson (21 år)</li><li>Helge Wårfors (20 år)</li><li>Isaac Evans (18 år)</li><li>Lauritz Brunborg (17 år)</li><li>Samuel Löwenmo (17 år)</li></ul></div>
       </section>
 
-      <section class="panel" id="timeline" aria-labelledby="timeline-heading">
-        <div class="panel__header">
-          <div>
-            <h2 class="section-title" id="timeline-heading">Räddningsprocent över tid</h2>
-            <p class="panel__description">
-              Upptäck formtoppar och svackor. Använd filtren för att fokusera på specifika lag eller spelare.
-            </p>
-          </div>
-          <div class="control-bar">
-            <div class="control-field">
-              <label for="timeline-team">Lag</label>
-              <select id="timeline-team">
-                <option value="ALL">Alla lag</option>
-              </select>
-            </div>
-            <div class="control-field">
-              <label for="timeline-search">Sök målvakt</label>
-              <input type="search" id="timeline-search" placeholder="Exempel: Svensson" />
-            </div>
-            <button class="button button--ghost" type="button" id="timeline-reset">Återställ</button>
-          </div>
-        </div>
-        <div class="chart-container">
-          <div id="timeline-chart" role="img" aria-label="Tidslinje för räddningsprocent"></div>
-        </div>
-        <p class="panel__hint">Dubbelklicka i grafen eller tryck på återställ för att visa alla målvakter igen.</p>
+      <section class="panel">
+        <h2>Sortable goalie table</h2>
+        <table>
+          <thead>
+            <tr>
+              <th class="sortable" data-key="team">Team</th>
+              <th class="sortable" data-key="goalie">Goalie</th>
+              <th class="sortable" data-key="games_played">Games</th>
+              <th class="sortable" data-key="total_shots">Shots</th>
+              <th class="sortable" data-key="total_saves">Saves</th>
+              <th class="sortable" data-key="goals_against">Goals Against</th>
+              <th class="sortable" data-key="avg_shots_per_game">Avg Shots/Game</th>
+              <th class="sortable" data-key="final_save_pct">Cumulative Save%</th>
+            </tr>
+          </thead>
+          <tbody id="summary-table-body"></tbody>
+        </table>
+        <p class="empty-state" id="table-empty" hidden>No goalies match the current filters.</p>
       </section>
+    </div>
 
-      <section class="panel" aria-labelledby="top-goalies-heading">
-        <div class="panel__header">
-          <div>
-            <h2 class="section-title" id="top-goalies-heading">Formstarka målvakter</h2>
-            <p class="panel__description">
-              Fyra målvakter med högst räddningsprocent (minst 25 skott) för att snabbt identifiera hetaste namnen.
-            </p>
-          </div>
-          <a class="button button--ghost" href="goalies.html">Se hela tabellen</a>
-        </div>
-        <div class="list-grid" id="top-goalies"></div>
-      </section>
+    <script>
+      const summaryData = [{"team": "FBC Partille", "goalie": "Robin Pagoldh (25 år)", "games_played": 6, "total_shots": 99, "total_saves": 77, "goals_against": 22, "final_save_pct": 0.7777777777777778, "avg_shots_per_game": 16.5, "save_pct_display": "77.8%"}, {"team": "Fagerhult Habo IBK", "goalie": "Alvin Eckert (18 år)", "games_played": 6, "total_shots": 19, "total_saves": 15, "goals_against": 4, "final_save_pct": 0.7894736842105263, "avg_shots_per_game": 3.1666666666666665, "save_pct_display": "78.9%"}, {"team": "Fagerhult Habo IBK", "goalie": "Johan Ringqvist (27 år)", "games_played": 6, "total_shots": 13, "total_saves": 8, "goals_against": 5, "final_save_pct": 0.6153846153846154, "avg_shots_per_game": 2.1666666666666665, "save_pct_display": "61.5%"}, {"team": "Floda IBK", "goalie": "Joel Andersson (18 år)", "games_played": 3, "total_shots": 37, "total_saves": 29, "goals_against": 8, "final_save_pct": 0.7837837837837838, "avg_shots_per_game": 12.333333333333334, "save_pct_display": "78.4%"}, {"team": "Floda IBK", "goalie": "Kalle Lundgren (25 år)", "games_played": 3, "total_shots": 23, "total_saves": 20, "goals_against": 3, "final_save_pct": 0.8695652173913043, "avg_shots_per_game": 7.666666666666667, "save_pct_display": "87.0%"}, {"team": "Floda IBK", "goalie": "Phoenix Wigilius (19 år)", "games_played": 5, "total_shots": 46, "total_saves": 36, "goals_against": 10, "final_save_pct": 0.782608695652174, "avg_shots_per_game": 9.2, "save_pct_display": "78.3%"}, {"team": "Fristads GoIF", "goalie": "Erik Christoffersson (22 år)", "games_played": 6, "total_shots": 119, "total_saves": 104, "goals_against": 15, "final_save_pct": 0.8739495798319328, "avg_shots_per_game": 19.833333333333332, "save_pct_display": "87.4%"}, {"team": "IBF Backadalen", "goalie": "Kasper Landström (19 år)", "games_played": 6, "total_shots": 14, "total_saves": 10, "goals_against": 4, "final_save_pct": 0.7142857142857143, "avg_shots_per_game": 2.3333333333333335, "save_pct_display": "71.4%"}, {"team": "IBF Backadalen", "goalie": "Lukas Källström (25 år)", "games_played": 3, "total_shots": 97, "total_saves": 89, "goals_against": 8, "final_save_pct": 0.9175257731958762, "avg_shots_per_game": 32.333333333333336, "save_pct_display": "91.8%"}, {"team": "IBF Backadalen", "goalie": "Oscar Larsson (21 år)", "games_played": 3, "total_shots": 81, "total_saves": 61, "goals_against": 20, "final_save_pct": 0.7530864197530864, "avg_shots_per_game": 27.0, "save_pct_display": "75.3%"}, {"team": "IBK Alingsås", "goalie": "Albin Flöjner (21 år)", "games_played": 6, "total_shots": 32, "total_saves": 17, "goals_against": 15, "final_save_pct": 0.53125, "avg_shots_per_game": 5.333333333333333, "save_pct_display": "53.1%"}, {"team": "IBK Alingsås", "goalie": "Vincent Sohlström (32 år)", "games_played": 6, "total_shots": 50, "total_saves": 36, "goals_against": 14, "final_save_pct": 0.72, "avg_shots_per_game": 8.333333333333334, "save_pct_display": "72.0%"}, {"team": "IBK Göteborg", "goalie": "Martinus Martinsson (21 år)", "games_played": 6, "total_shots": 29, "total_saves": 19, "goals_against": 10, "final_save_pct": 0.6551724137931034, "avg_shots_per_game": 4.833333333333333, "save_pct_display": "65.5%"}, {"team": "IBK Göteborg", "goalie": "Oskar Adler (31 år)", "games_played": 6, "total_shots": 76, "total_saves": 55, "goals_against": 21, "final_save_pct": 0.7236842105263158, "avg_shots_per_game": 12.666666666666666, "save_pct_display": "72.4%"}, {"team": "IBK Kungälv", "goalie": "Johan Ljungberg (29 år)", "games_played": 6, "total_shots": 70, "total_saves": 49, "goals_against": 21, "final_save_pct": 0.7, "avg_shots_per_game": 11.666666666666666, "save_pct_display": "70.0%"}, {"team": "IBK Kungälv", "goalie": "Johan Svensson (30 år)", "games_played": 5, "total_shots": 35, "total_saves": 26, "goals_against": 9, "final_save_pct": 0.7428571428571429, "avg_shots_per_game": 7.0, "save_pct_display": "74.3%"}, {"team": "IBK Lidköping", "goalie": "Emil Lundberg (25 år)", "games_played": 5, "total_shots": 87, "total_saves": 69, "goals_against": 18, "final_save_pct": 0.7931034482758621, "avg_shots_per_game": 17.4, "save_pct_display": "79.3%"}, {"team": "IBK Lidköping", "goalie": "Liam Eriksson (17 år)", "games_played": 6, "total_shots": 56, "total_saves": 45, "goals_against": 11, "final_save_pct": 0.8035714285714286, "avg_shots_per_game": 9.333333333333334, "save_pct_display": "80.4%"}, {"team": "Mullsjö AIS Utveckling", "goalie": "David Vik (29 år)", "games_played": 2, "total_shots": 19, "total_saves": 11, "goals_against": 8, "final_save_pct": 0.5789473684210527, "avg_shots_per_game": 9.5, "save_pct_display": "57.9%"}, {"team": "Mullsjö AIS Utveckling", "goalie": "Elliot Järn (19 år)", "games_played": 6, "total_shots": 52, "total_saves": 38, "goals_against": 14, "final_save_pct": 0.7307692307692307, "avg_shots_per_game": 8.666666666666666, "save_pct_display": "73.1%"}, {"team": "Mullsjö AIS Utveckling", "goalie": "Isak Dorell (22 år)", "games_played": 4, "total_shots": 20, "total_saves": 14, "goals_against": 6, "final_save_pct": 0.7, "avg_shots_per_game": 5.0, "save_pct_display": "70.0%"}, {"team": "Pixbo IBF", "goalie": "Elmer Arne (18 år)", "games_played": 6, "total_shots": 78, "total_saves": 64, "goals_against": 14, "final_save_pct": 0.8205128205128205, "avg_shots_per_game": 13.0, "save_pct_display": "82.1%"}, {"team": "Särö IBK", "goalie": "Simon Kure (22 år)", "games_played": 6, "total_shots": 52, "total_saves": 37, "goals_against": 15, "final_save_pct": 0.7115384615384616, "avg_shots_per_game": 8.666666666666666, "save_pct_display": "71.2%"}];
+      const goalieToTeam = {"Albin Flöjner (21 år)": "IBK Alingsås", "Alvin Eckert (18 år)": "Fagerhult Habo IBK", "David Vik (29 år)": "Mullsjö AIS Utveckling", "Elliot Järn (19 år)": "Mullsjö AIS Utveckling", "Elmer Arne (18 år)": "Pixbo IBF", "Emil Lundberg (25 år)": "IBK Lidköping", "Erik Christoffersson (22 år)": "Fristads GoIF", "Isak Dorell (22 år)": "Mullsjö AIS Utveckling", "Joel Andersson (18 år)": "Floda IBK", "Johan Ljungberg (29 år)": "IBK Kungälv", "Johan Ringqvist (27 år)": "Fagerhult Habo IBK", "Johan Svensson (30 år)": "IBK Kungälv", "Kalle Lundgren (25 år)": "Floda IBK", "Kasper Landström (19 år)": "IBF Backadalen", "Liam Eriksson (17 år)": "IBK Lidköping", "Lukas Källström (25 år)": "IBF Backadalen", "Martinus Martinsson (21 år)": "IBK Göteborg", "Oscar Larsson (21 år)": "IBF Backadalen", "Oskar Adler (31 år)": "IBK Göteborg", "Phoenix Wigilius (19 år)": "Floda IBK", "Robin Pagoldh (25 år)": "FBC Partille", "Simon Kure (22 år)": "Särö IBK", "Vincent Sohlström (32 år)": "IBK Alingsås"};
+      const traceGoalies = ["Robin Pagoldh (25 år)", "Liam Eriksson (17 år)", "Phoenix Wigilius (19 år)", "Joel Andersson (18 år)", "Vincent Sohlström (32 år)", "Albin Flöjner (21 år)", "Martinus Martinsson (21 år)", "Oskar Adler (31 år)", "Erik Christoffersson (22 år)", "Simon Kure (22 år)", "Elmer Arne (18 år)", "Oscar Larsson (21 år)", "Kasper Landström (19 år)", "David Vik (29 år)", "Elliot Järn (19 år)", "Johan Svensson (30 år)", "Johan Ljungberg (29 år)", "Alvin Eckert (18 år)", "Johan Ringqvist (27 år)", "Emil Lundberg (25 år)", "Isak Dorell (22 år)", "Kalle Lundgren (25 år)", "Lukas Källström (25 år)"];
 
-      <section class="panel" aria-labelledby="insights-heading">
-        <div class="panel__header">
-          <div>
-            <h2 class="section-title" id="insights-heading">Övriga insikter</h2>
-            <p class="panel__description">
-              Små notiser baserade på de senaste siffrorna och målvakternas matchbelastning.
-            </p>
-          </div>
-          <div class="stat-card">
-            <span class="stat-card__label">Målvakter utan registrerade skott</span>
-            <span class="stat-card__value" data-stat="zero-shot-count">–</span>
-          </div>
-        </div>
-        <div class="tag-cloud" id="zero-shot-tags"></div>
-        <ul class="insights" id="insights-list"></ul>
-      </section>
+      function renderTable(rows) {
+        const tbody = document.getElementById('summary-table-body');
+        tbody.innerHTML = '';
+        if (!rows.length) {
+          document.getElementById('table-empty').hidden = false;
+          return;
+        }
+        document.getElementById('table-empty').hidden = true;
+        const fragment = document.createDocumentFragment();
+        rows.forEach((row) => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${row.team || 'Unknown'}</td>
+            <td>${row.goalie}</td>
+            <td>${row.games_played}</td>
+            <td>${row.total_shots}</td>
+            <td>${row.total_saves}</td>
+            <td>${row.goals_against}</td>
+            <td>${(row.avg_shots_per_game || 0).toFixed(1)}</td>
+            <td>${row.save_pct_display || '–'}</td>`;
+          fragment.appendChild(tr);
+        });
+        tbody.appendChild(fragment);
+      }
 
-      <section class="panel" aria-labelledby="cta-heading">
-        <div class="panel__header">
-          <div>
-            <h2 class="section-title" id="cta-heading">Fördjupa dig</h2>
-            <p class="panel__description">
-              Behöver du fler perspektiv? Utforska detaljsidorna för att jämföra målvakter eller analysera lagens
-              totala belastning.
-            </p>
-          </div>
-        </div>
-        <div class="hero__actions">
-          <a class="button button--primary" href="goalies.html">Målvaktsvy</a>
-          <a class="button button--ghost" href="teams.html">Lagöversikt</a>
-        </div>
-      </section>
-    </main>
+      function currentFilters() {
+        return {
+          team: document.getElementById('team-filter').value,
+          search: document.getElementById('goalie-search').value.trim().toLowerCase(),
+        };
+      }
 
-    <footer class="footer">
-      Data hämtad från statistik.innebandy.se via projektets Python-skript. Gränssnittet är byggt i modulär JavaScript
-      för att enkelt kunna kompletteras med fler visualiseringar.
-    </footer>
+      function applyFilters(data) {
+        const { team, search } = currentFilters();
+        return data.filter((row) => {
+          const matchesTeam = team === 'ALL' || (row.team || 'Unknown') === team;
+          const matchesSearch = !search || row.goalie.toLowerCase().includes(search);
+          return matchesTeam && matchesSearch;
+        });
+      }
+
+      function restyleChart() {
+        const { team, search } = currentFilters();
+        traceGoalies.forEach((goalie, index) => {
+          const teamMatch = team === 'ALL' || goalieToTeam[goalie] === team;
+          const searchMatch = !search || goalie.toLowerCase().includes(search);
+          const visible = teamMatch && searchMatch;
+          Plotly.restyle('savepct-chart', { visible: visible ? true : 'legendonly' }, [index]);
+        });
+      }
+
+      function sortBy(key, ascending) {
+        return (a, b) => {
+          const av = a[key] ?? (typeof a[key] === 'number' ? 0 : '');
+          const bv = b[key] ?? (typeof b[key] === 'number' ? 0 : '');
+          if (typeof av === 'number' && typeof bv === 'number') {
+            return ascending ? av - bv : bv - av;
+          }
+          return ascending ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
+        };
+      }
+
+      window.addEventListener('DOMContentLoaded', () => {
+        let sortState = { key: 'team', ascending: true };
+        renderTable(summaryData.sort(sortBy(sortState.key, sortState.ascending)));
+
+        document.getElementById('team-filter').addEventListener('change', () => {
+          const filtered = applyFilters(summaryData).sort(sortBy(sortState.key, sortState.ascending));
+          renderTable(filtered);
+          restyleChart();
+        });
+
+        document.getElementById('goalie-search').addEventListener('input', () => {
+          const filtered = applyFilters(summaryData).sort(sortBy(sortState.key, sortState.ascending));
+          renderTable(filtered);
+          restyleChart();
+        });
+
+        document.getElementById('reset-view').addEventListener('click', () => {
+          sortState = { key: 'team', ascending: true };
+          document.getElementById('team-filter').value = 'ALL';
+          document.getElementById('goalie-search').value = '';
+          renderTable(summaryData.sort(sortBy(sortState.key, sortState.ascending)));
+          traceGoalies.forEach((goalie, index) => {
+            Plotly.restyle('savepct-chart', { visible: true }, [index]);
+          });
+        });
+
+        document.querySelectorAll('th.sortable').forEach((th) => {
+          th.addEventListener('click', () => {
+            const key = th.dataset.key;
+            if (sortState.key === key) {
+              sortState.ascending = !sortState.ascending;
+            } else {
+              sortState = { key, ascending: true };
+            }
+            const filtered = applyFilters(summaryData).sort(sortBy(sortState.key, sortState.ascending));
+            renderTable(filtered);
+          });
+        });
+
+        Plotly.d3.select('#savepct-chart').on('plotly_doubleclick', () => {
+          document.getElementById('reset-view').click();
+        });
+      });
+    </script>
   </body>
 </html>
