@@ -93,3 +93,13 @@ export function sortData(rows, key, ascending = true) {
     return String(av).localeCompare(String(bv)) * factor;
   });
 }
+
+export function parseSearchTerms(value) {
+  if (!value) {
+    return [];
+  }
+  return value
+    .split(/[;,|\n]+/)
+    .map((term) => term.trim().toLowerCase())
+    .filter(Boolean);
+}

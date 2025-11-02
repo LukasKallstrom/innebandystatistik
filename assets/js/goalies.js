@@ -4,12 +4,13 @@ import {
   computeUniqueTeams,
   formatNumber,
   formatPercent,
+  parseSearchTerms,
   sortData,
 } from './utils.js';
 
 const state = {
   team: 'ALL',
-  search: '',
+  searchTerms: [],
   minShots: 0,
   sortKey: 'final_save_pct',
   ascending: false,
@@ -44,7 +45,8 @@ function updateSortIndicators() {
 function filterRows() {
   return summary.filter((row) => {
     const matchesTeam = state.team === 'ALL' || row.team === state.team;
-    const matchesSearch = !state.search || row.goalie.toLowerCase().includes(state.search);
+    const matchesSearch =
+      !state.searchTerms.length || state.searchTerms.some((term) => row.goalie.toLowerCase().includes(term));
     const meetsShots = (row.total_shots || 0) >= state.minShots;
     return matchesTeam && matchesSearch && meetsShots;
   });
@@ -123,7 +125,7 @@ function registerEvents() {
   });
 
   searchInput?.addEventListener('input', (event) => {
-    state.search = event.target.value.trim().toLowerCase();
+    state.searchTerms = parseSearchTerms(event.target.value);
     applyStateChange();
   });
 
@@ -134,7 +136,7 @@ function registerEvents() {
 
   resetButton?.addEventListener('click', () => {
     state.team = 'ALL';
-    state.search = '';
+    state.searchTerms = [];
     state.minShots = 0;
     state.sortKey = 'final_save_pct';
     state.ascending = false;

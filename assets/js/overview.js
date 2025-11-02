@@ -1,10 +1,4 @@
-import {
-  getSummaryData,
-  getGoalieMap,
-  getTimelineBundle,
-  getTraceOrder,
-  getUpdatedAt,
-} from './data.js';
+import { loadGoalieDataset } from './data.js';
 import {
   attachNavHighlight,
   computeDateRange,
@@ -14,6 +8,7 @@ import {
   createOption,
   formatNumber,
   formatPercent,
+  parseSearchTerms,
   sortData,
 } from './utils.js';
 
@@ -26,6 +21,23 @@ const updatedTitleFormatter = new Intl.DateTimeFormat('sv-SE', {
   dateStyle: 'full',
   timeStyle: 'long',
 });
+
+const timelineState = {
+  goalieMap: {},
+  traceOrder: [],
+  traceIndex: new Map(),
+};
+
+const timelineElements = {
+  chart: null,
+  teamSelect: null,
+  searchInput: null,
+  resetButton: null,
+  resizeListenerAttached: false,
+};
+
+let timelineListenersRegistered = false;
+let isRefreshing = false;
 
 function populateStats({ teams, goalies, shots, range, zeroShotCount }) {
   const teamEl = document.querySelector('[data-stat="team-count"]');
@@ -140,30 +152,118 @@ function renderSeasonInsights(summary) {
 }
 
 function cloneTimelineData(timeline) {
-  return timeline.data.map((trace) => ({ ...trace }));
+  return (timeline?.data ?? []).map((trace) => ({ ...trace }));
 }
 
-async function renderTimeline() {
-  const [timeline, goalieMap, traceOrder] = await Promise.all([
-    getTimelineBundle(),
-    getGoalieMap(),
-    getTraceOrder(),
-  ]);
+function ensureTimelineElements() {
+  if (!timelineElements.chart) {
+    timelineElements.chart = document.getElementById('timeline-chart');
+  }
+  if (!timelineElements.teamSelect) {
+    timelineElements.teamSelect = document.getElementById('timeline-team');
+  }
+  if (!timelineElements.searchInput) {
+    timelineElements.searchInput = document.getElementById('timeline-search');
+  }
+  if (!timelineElements.resetButton) {
+    timelineElements.resetButton = document.getElementById('timeline-reset');
+  }
+}
 
-  const chartId = 'timeline-chart';
-  const chartElement = document.getElementById(chartId);
+function populateTimelineTeams(traceOrder, goalieMap, previousValue = 'ALL') {
+  ensureTimelineElements();
+  const select = timelineElements.teamSelect;
+  if (!select) return;
+
+  const uniqueTeams = computeUniqueTeams(
+    traceOrder.map((goalie) => ({ team: goalieMap[goalie] })).filter((row) => row.team),
+  );
+
+  const desiredValue = uniqueTeams.includes(previousValue) ? previousValue : 'ALL';
+
+  select.innerHTML = '';
+  select.appendChild(createOption('ALL', 'Alla lag'));
+  uniqueTeams.forEach((team) => select.appendChild(createOption(team, team)));
+  select.value = desiredValue;
+}
+
+function applyTimelineFilters() {
+  ensureTimelineElements();
+  const chart = timelineElements.chart;
+  if (!chart) return;
+
+  const teamValue = timelineElements.teamSelect?.value || 'ALL';
+  const searchTerms = parseSearchTerms(timelineElements.searchInput?.value || '');
+
+  timelineState.traceOrder.forEach((goalie) => {
+    const index = timelineState.traceIndex.get(goalie);
+    if (index === undefined) return;
+    const team = timelineState.goalieMap[goalie] || 'Okänt lag';
+    const matchesTeam = teamValue === 'ALL' || team === teamValue;
+    const matchesSearch = !searchTerms.length || searchTerms.some((term) => goalie.toLowerCase().includes(term));
+    const visible = matchesTeam && matchesSearch;
+    Plotly.restyle(chart, { visible: visible ? true : 'legendonly' }, [index]);
+  });
+}
+
+function setAllTracesVisible() {
+  const chart = timelineElements.chart;
+  if (!chart) return;
+  timelineState.traceIndex.forEach((_, goalie) => {
+    const index = timelineState.traceIndex.get(goalie);
+    if (index === undefined) return;
+    Plotly.restyle(chart, { visible: true }, [index]);
+  });
+}
+
+function handleTimelineReset() {
+  ensureTimelineElements();
+  if (timelineElements.teamSelect) {
+    timelineElements.teamSelect.value = 'ALL';
+  }
+  if (timelineElements.searchInput) {
+    timelineElements.searchInput.value = '';
+  }
+  setAllTracesVisible();
+}
+
+function registerTimelineEvents() {
+  ensureTimelineElements();
+  if (timelineListenersRegistered) {
+    return;
+  }
+
+  timelineElements.teamSelect?.addEventListener('change', applyTimelineFilters);
+  timelineElements.searchInput?.addEventListener('input', () => {
+    window.requestAnimationFrame(applyTimelineFilters);
+  });
+  timelineElements.resetButton?.addEventListener('click', () => {
+    handleTimelineReset();
+    applyTimelineFilters();
+  });
+
+  timelineListenersRegistered = true;
+}
+
+async function renderTimeline(timeline, goalieMap, traceOrder) {
+  ensureTimelineElements();
+  const chartElement = timelineElements.chart;
   if (!chartElement) {
     return;
   }
+
+  const previousTeam = timelineElements.teamSelect?.value || 'ALL';
+  const previousSearch = timelineElements.searchInput?.value || '';
+
   const data = cloneTimelineData(timeline);
   const layout = {
-    ...timeline.layout,
+    ...(timeline?.layout || {}),
+    plot_bgcolor: 'rgba(15, 23, 42, 0.65)',
     paper_bgcolor: 'rgba(8, 12, 24, 0.95)',
-    plot_bgcolor: 'rgba(8, 12, 24, 0.65)',
     font: { family: 'Inter, sans-serif', color: '#e2e8f0' },
     margin: { l: 70, r: 20, t: 60, b: 60 },
     legend: {
-      ...timeline.layout.legend,
+      ...(timeline?.layout?.legend || {}),
       orientation: 'h',
       x: 0,
       y: -0.25,
@@ -173,21 +273,21 @@ async function renderTimeline() {
       bgcolor: '#0f172a',
       bordercolor: '#38bdf8',
     },
-  };
-  layout.xaxis = {
-    ...(timeline.layout.xaxis || {}),
-    gridcolor: 'rgba(148, 163, 184, 0.2)',
-    linecolor: 'rgba(148, 163, 184, 0.35)',
-  };
-  layout.yaxis = {
-    ...(timeline.layout.yaxis || {}),
-    gridcolor: 'rgba(148, 163, 184, 0.2)',
-    linecolor: 'rgba(148, 163, 184, 0.35)',
-    tickformat: ',.0%',
+    xaxis: {
+      ...(timeline?.layout?.xaxis || {}),
+      gridcolor: 'rgba(148, 163, 184, 0.2)',
+      linecolor: 'rgba(148, 163, 184, 0.35)',
+    },
+    yaxis: {
+      ...(timeline?.layout?.yaxis || {}),
+      gridcolor: 'rgba(148, 163, 184, 0.2)',
+      linecolor: 'rgba(148, 163, 184, 0.35)',
+      tickformat: ',.0%',
+    },
   };
 
   const config = {
-    ...timeline.config,
+    ...(timeline?.config || {}),
     responsive: true,
     displaylogo: false,
     toImageButtonOptions: {
@@ -197,57 +297,37 @@ async function renderTimeline() {
     modeBarButtonsToRemove: ['select2d', 'lasso2d'],
   };
 
-  await Plotly.newPlot(chartElement, data, layout, config);
+  await Plotly.react(chartElement, data, layout, config);
 
-  const teamSelect = document.getElementById('timeline-team');
-  const searchInput = document.getElementById('timeline-search');
-  const resetButton = document.getElementById('timeline-reset');
-
-  const uniqueTeams = computeUniqueTeams(
-    traceOrder.map((goalie) => ({ team: goalieMap[goalie] })).filter((row) => row.team),
-  );
-  uniqueTeams.forEach((team) => {
-    teamSelect?.appendChild(createOption(team, team));
-  });
-
-  const traceIndex = new Map();
+  timelineState.traceOrder = [...traceOrder];
+  timelineState.goalieMap = { ...goalieMap };
+  timelineState.traceIndex = new Map();
   data.forEach((trace, index) => {
-    traceIndex.set(trace.name, index);
+    timelineState.traceIndex.set(trace.name, index);
   });
 
-  function applyFilters() {
-    const teamValue = teamSelect?.value || 'ALL';
-    const searchTerm = (searchInput?.value || '').trim().toLowerCase();
-    traceOrder.forEach((goalie) => {
-      const index = traceIndex.get(goalie);
-      if (index === undefined) return;
-      const team = goalieMap[goalie] || 'Unknown';
-      const matchesTeam = teamValue === 'ALL' || team === teamValue;
-      const matchesSearch = !searchTerm || goalie.toLowerCase().includes(searchTerm);
-      const visible = matchesTeam && matchesSearch;
-      Plotly.restyle(chartElement, { visible: visible ? true : 'legendonly' }, [index]);
-    });
+  populateTimelineTeams(traceOrder, goalieMap, previousTeam);
+  if (timelineElements.searchInput) {
+    timelineElements.searchInput.value = previousSearch;
   }
 
-  teamSelect?.addEventListener('change', applyFilters);
-  searchInput?.addEventListener('input', () => {
-    window.requestAnimationFrame(applyFilters);
-  });
-  resetButton?.addEventListener('click', () => {
-    if (teamSelect) teamSelect.value = 'ALL';
-    if (searchInput) searchInput.value = '';
-    traceOrder.forEach((goalie) => {
-      const index = traceIndex.get(goalie);
-      if (index === undefined) return;
-      Plotly.restyle(chartElement, { visible: true }, [index]);
-    });
-  });
+  registerTimelineEvents();
 
   Plotly.d3.select(chartElement).on('plotly_doubleclick', () => {
-    resetButton?.click();
+    handleTimelineReset();
+    applyTimelineFilters();
   });
 
-  window.addEventListener('resize', () => Plotly.Plots.resize(chartElement));
+  if (!timelineElements.resizeListenerAttached) {
+    window.addEventListener('resize', () => {
+      if (timelineElements.chart) {
+        Plotly.Plots.resize(timelineElements.chart);
+      }
+    });
+    timelineElements.resizeListenerAttached = true;
+  }
+
+  applyTimelineFilters();
 }
 
 function renderLastUpdated(updatedAt) {
@@ -274,34 +354,64 @@ function renderLastUpdated(updatedAt) {
   element.setAttribute('title', updatedTitleFormatter.format(date));
 }
 
+async function loadAndRender(options = {}) {
+  const dataset = await loadGoalieDataset(options);
+  const summary = Array.isArray(dataset.summary) ? dataset.summary : [];
+  const goalieMap = dataset.goalieToTeam ?? {};
+  const timeline = dataset.timeline ?? { data: [], layout: {}, config: {} };
+  const traceOrder = Array.isArray(dataset.traceOrder) && dataset.traceOrder.length
+    ? dataset.traceOrder
+    : (timeline.data || []).map((trace) => trace.name);
+
+  const teams = computeUniqueTeams(summary);
+  const zeroShot = computeZeroShotGoalies(summary);
+  const range = computeDateRange(timeline.data || []);
+  const totalShots = summary.reduce((acc, row) => acc + (row.total_shots || 0), 0);
+
+  populateStats({
+    teams: teams.length,
+    goalies: summary.length,
+    shots: totalShots,
+    range,
+    zeroShotCount: zeroShot.length,
+  });
+
+  renderLastUpdated(dataset.updatedAt ?? null);
+  renderZeroShotTags(zeroShot);
+  renderTopGoalies(summary, goalieMap);
+  renderSeasonInsights(summary);
+  await renderTimeline(timeline, goalieMap, traceOrder);
+}
+
+async function handleRefresh(event) {
+  const button = event.currentTarget;
+  if (!(button instanceof HTMLButtonElement) || isRefreshing) {
+    return;
+  }
+
+  isRefreshing = true;
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Uppdaterar…';
+
+  try {
+    await loadAndRender({ cacheBust: true });
+  } catch (error) {
+    console.error('Failed to refresh dataset', error);
+  } finally {
+    button.disabled = false;
+    button.textContent = originalText || 'Uppdatera data';
+    isRefreshing = false;
+  }
+}
+
 async function init() {
   attachNavHighlight('overview');
+  const refreshButton = document.getElementById('refresh-data');
+  refreshButton?.addEventListener('click', handleRefresh);
+
   try {
-    const [summary, goalieMap, timeline, updatedAt] = await Promise.all([
-      getSummaryData(),
-      getGoalieMap(),
-      getTimelineBundle(),
-      getUpdatedAt(),
-    ]);
-
-    const teams = computeUniqueTeams(summary);
-    const zeroShot = computeZeroShotGoalies(summary);
-    const range = computeDateRange(timeline.data);
-    const totalShots = summary.reduce((acc, row) => acc + (row.total_shots || 0), 0);
-
-    populateStats({
-      teams: teams.length,
-      goalies: summary.length,
-      shots: totalShots,
-      range,
-      zeroShotCount: zeroShot.length,
-    });
-
-    renderLastUpdated(updatedAt);
-    renderZeroShotTags(zeroShot);
-    renderTopGoalies(summary, goalieMap);
-    renderSeasonInsights(summary);
-    await renderTimeline();
+    await loadAndRender();
   } catch (error) {
     console.error('Failed to initialise overview page', error);
     renderLastUpdated(null);

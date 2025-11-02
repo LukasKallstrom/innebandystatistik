@@ -65,7 +65,13 @@
           <div class="control-bar">
             <div class="control-field">
               <label for="team-search">Sök lag</label>
-              <input type="search" id="team-search" placeholder="Exempel: Pixbo" />
+              <input
+                type="search"
+                id="team-search"
+                placeholder="Exempel: Pixbo, Partille"
+                aria-describedby="team-search-help"
+              />
+              <p class="control-field__help" id="team-search-help">Separera flera lag med komma eller semikolon.</p>
             </div>
             <button class="button button--ghost" type="button" id="team-reset">Återställ</button>
           </div>

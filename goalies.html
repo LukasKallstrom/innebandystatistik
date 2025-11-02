@@ -63,8 +63,14 @@
             </select>
           </div>
           <div class="control-field">
-            <label for="goalie-search">Sök målvakt</label>
-            <input type="search" id="goalie-search" placeholder="Exempel: Pagoldh" />
+            <label for="goalie-search">Sök målvakter</label>
+            <input
+              type="search"
+              id="goalie-search"
+              placeholder="Exempel: Pagoldh, Wigilius"
+              aria-describedby="goalie-search-help"
+            />
+            <p class="control-field__help" id="goalie-search-help">Separera flera målvakter med komma eller semikolon.</p>
           </div>
           <div class="control-field">
             <label for="goalie-shot-filter">Minsta antal skott</label>
