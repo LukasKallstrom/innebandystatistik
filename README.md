@@ -73,6 +73,17 @@ Important switches:
 
 Open the generated HTML file in your browser to explore the timeline, filter goalies by team, and compare summary statistics.
 
+### 3. Publicera dashboards på GitHub Pages
+Den uppdaterade `index.html` tillsammans med filerna under `assets/` fungerar helt fristående och kan publiceras direkt på GitHub
+Pages eller valfri statisk webbhotell. Så här håller du sidan aktuell:
+
+1. Kör `main.py` och `interactive_savepct.py` för att generera färska data.
+2. Uppdatera `assets/data/goalies.json` med de nya JSON-exporterna (skripten kan automatiseras i ett GitHub Actions-flöde).
+3. Committa och pusha ändringarna till den branch som GitHub Pages läser från (`main` eller `gh-pages`).
+
+När JSON-filen uppdateras kommer den publicerade sidan att läsa in den senaste versionen vid varje sidladdning, och tidsstämpeln
+"Senast uppdaterad" på startsidan visar när datasetet genererades senast.
+
 ## Running the test suite
 The repository includes a small parser-focused test suite. Install the required dependencies (including BeautifulSoup) and run:
 

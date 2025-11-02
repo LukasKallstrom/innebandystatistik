@@ -36,3 +36,8 @@ export async function getTraceOrder() {
   const data = await loadGoalieDataset();
   return data.traceOrder;
 }
+
+export async function getUpdatedAt() {
+  const data = await loadGoalieDataset();
+  return data.updatedAt ?? null;
+}
