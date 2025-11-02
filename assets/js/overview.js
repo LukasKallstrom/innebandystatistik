@@ -3,6 +3,7 @@ import {
   getGoalieMap,
   getTimelineBundle,
   getTraceOrder,
+  getUpdatedAt,
 } from './data.js';
 import {
   attachNavHighlight,
@@ -17,6 +18,14 @@ import {
 } from './utils.js';
 
 const dateFormatter = new Intl.DateTimeFormat('sv-SE', { dateStyle: 'medium' });
+const updatedFormatter = new Intl.DateTimeFormat('sv-SE', {
+  dateStyle: 'long',
+  timeStyle: 'short',
+});
+const updatedTitleFormatter = new Intl.DateTimeFormat('sv-SE', {
+  dateStyle: 'full',
+  timeStyle: 'long',
+});
 
 function populateStats({ teams, goalies, shots, range, zeroShotCount }) {
   const teamEl = document.querySelector('[data-stat="team-count"]');
@@ -241,13 +250,38 @@ async function renderTimeline() {
   window.addEventListener('resize', () => Plotly.Plots.resize(chartElement));
 }
 
+function renderLastUpdated(updatedAt) {
+  const element = document.getElementById('last-updated');
+  if (!element) return;
+
+  if (!updatedAt) {
+    element.textContent = 'Okänt';
+    element.removeAttribute('datetime');
+    element.removeAttribute('title');
+    return;
+  }
+
+  const date = new Date(updatedAt);
+  if (Number.isNaN(date.valueOf())) {
+    element.textContent = 'Okänt';
+    element.removeAttribute('datetime');
+    element.removeAttribute('title');
+    return;
+  }
+
+  element.textContent = updatedFormatter.format(date);
+  element.setAttribute('datetime', date.toISOString());
+  element.setAttribute('title', updatedTitleFormatter.format(date));
+}
+
 async function init() {
   attachNavHighlight('overview');
   try {
-    const [summary, goalieMap, timeline] = await Promise.all([
+    const [summary, goalieMap, timeline, updatedAt] = await Promise.all([
       getSummaryData(),
       getGoalieMap(),
       getTimelineBundle(),
+      getUpdatedAt(),
     ]);
 
     const teams = computeUniqueTeams(summary);
@@ -263,12 +297,14 @@ async function init() {
       zeroShotCount: zeroShot.length,
     });
 
+    renderLastUpdated(updatedAt);
     renderZeroShotTags(zeroShot);
     renderTopGoalies(summary, goalieMap);
     renderSeasonInsights(summary);
     await renderTimeline();
   } catch (error) {
     console.error('Failed to initialise overview page', error);
+    renderLastUpdated(null);
     const chartContainer = document.getElementById('timeline-chart');
     if (chartContainer) {
       chartContainer.textContent = 'Det gick inte att ladda tidslinjen just nu.';
