@@ -10,6 +10,26 @@ def _soup(html: str) -> BeautifulSoup:
     return BeautifulSoup(html, "lxml")
 
 
+def test_match_time_extraction_handles_comment_between_date_and_time():
+    """The match time lives in Matchinformation with an HTML comment separator."""
+
+    html = """
+    <html><body>
+      <table class="clCommonGrid" id="iMatchInfo">
+        <tbody>
+          <tr>
+            <td>Tid</td>
+            <td><span>2025-09-20<!-- br ok --> 14:00</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </body></html>
+    """
+    doc = _soup(html)
+    game, _ = parse_game(doc, url="http://example.test/game?matchid=1")
+    assert game.date == datetime(2025, 9, 20, 14, 0)
+
+
 def test_player_table_fallback_pos_mv_parsing():
     """Röktest: Spelartabell ('Statistik i matchen') med Pos.=MV.
     Ska filtrera fram endast målvakt och räkna saves = skott - insl.mål.
