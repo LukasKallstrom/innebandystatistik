@@ -194,9 +194,14 @@ def first_text(doc: BeautifulSoup, selectors: Iterable[str]) -> Optional[str]:
     for selector in selectors:
         element = doc.select_one(selector)
         if element:
-            text = element.get_text(strip=True)
+            # The markup sometimes intersperses HTML comments between the date and
+            # time (e.g. "2025-09-20<!-- br ok --> 14:00"), which causes
+            # ``get_text(strip=True)`` to concatenate the fragments into
+            # ``2025-09-2014:00``.  Join text nodes with a space and collapse any
+            # remaining whitespace so the resulting string keeps the separator.
+            text = element.get_text(" ", strip=True)
             if text:
-                return text
+                return re.sub(r"\s+", " ", text)
     return None
 
 
