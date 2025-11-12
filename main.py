@@ -205,99 +205,18 @@ def first_text(doc: BeautifulSoup, selectors: Iterable[str]) -> Optional[str]:
     return None
 
 
-MONTH_TRANSLATIONS = {
-    "januari": "january",
-    "jan": "jan",
-    "februari": "february",
-    "feb": "feb",
-    "mars": "march",
-    "mar": "mar",
-    "april": "april",
-    "apr": "apr",
-    "maj": "may",
-    "juni": "june",
-    "jun": "jun",
-    "juli": "july",
-    "jul": "jul",
-    "augusti": "august",
-    "aug": "aug",
-    "september": "september",
-    "sep": "sep",
-    "oktober": "october",
-    "okt": "oct",
-    "november": "november",
-    "nov": "nov",
-    "december": "december",
-    "dec": "dec",
-}
-
-MONTH_REGEX = re.compile(
-    r"\b(" + "|".join(sorted(MONTH_TRANSLATIONS.keys(), key=len, reverse=True)) + r")\b",
-    flags=re.IGNORECASE,
-)
-
-
 def parse_date(raw: Optional[str]) -> Optional[datetime]:
     if not raw:
         return None
-
-    cleaned = (
-        raw.replace("\u00a0", " ")
-        .replace("\u202f", " ")
-        .replace("|", " ")
-        .strip()
-    )
-    if not cleaned:
-        return None
-
-    cleaned = re.sub(r"\bkl\.?\b", " ", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"\s+", " ", cleaned)
-    cleaned = re.sub(r"(\d{1,2})\.(\d{2})(?!\d)", r"\1:\2", cleaned)
-
-    def _replace_month(match: re.Match[str]) -> str:
-        token = match.group(0)
-        key = token.lower()
-        replacement = MONTH_TRANSLATIONS.get(key, token)
-        if token.isupper():
-            return replacement.upper()
-        if token[0].isupper():
-            return replacement.capitalize()
-        return replacement
-
-    cleaned = MONTH_REGEX.sub(_replace_month, cleaned)
-
-    # Try a set of known reliable formats first.
-    formats = (
-        "%Y-%m-%d %H:%M",
-        "%Y-%m-%d %H:%M:%S",
-        "%Y-%m-%d",
-        "%d %B %Y %H:%M",
-        "%d %B %Y",
-        "%d %b %Y %H:%M",
-        "%d %b %Y",
-    )
-    for fmt in formats:
+    for fmt in ("%Y-%m-%d", "%Y-%m-%d %H:%M", "%d %B %Y", "%Y-%m-%d %H:%M:%S"):
         with contextlib.suppress(ValueError):
-            return datetime.strptime(cleaned, fmt)
-
-    # As a last resort, attempt to locate an ISO date and optional time within
-    # the string.  This helps when extra words follow the timestamp.
-    iso_match = re.search(r"(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}))?", cleaned)
-    if iso_match:
-        date_part = iso_match.group(1)
-        time_part = iso_match.group(2)
-        fmt = "%Y-%m-%d %H:%M" if time_part else "%Y-%m-%d"
-        target = f"{date_part} {time_part}".strip()
-        with contextlib.suppress(ValueError):
-            return datetime.strptime(target, fmt)
-
+            return datetime.strptime(raw, fmt)
     # dateutil offers better coverage but is an optional dependency, so only
     # import it when we truly need to.
     with contextlib.suppress(ImportError, ValueError):
         from dateutil import parser as date_parser
 
-        return date_parser.parse(cleaned)
-
+        return date_parser.parse(raw)
     return None
 
 
@@ -856,7 +775,6 @@ def main() -> None:
     games: List[Game] = []
     appearances: List[Appearance] = []
     total_games = len(game_links)
-    consecutive_without_goalies = 0
     for idx, url in enumerate(game_links, start=1):
         logger.info("Fetching game %d/%d: %s", idx, total_games, url)
         try:
@@ -873,16 +791,7 @@ def main() -> None:
             url,
         )
         if not game_appearances:
-            consecutive_without_goalies += 1
             logger.warning("No goalie statistics detected for %s", url)
-            if consecutive_without_goalies >= 5:
-                logger.warning(
-                    "Encountered %d consecutive games without goalie statistics; stopping early.",
-                    consecutive_without_goalies,
-                )
-                break
-        else:
-            consecutive_without_goalies = 0
 
     if not games:
         raise SystemExit("No games found; verify the fixture URL.")

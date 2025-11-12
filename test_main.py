@@ -187,18 +187,3 @@ def test_percent_with_spaces_and_nbsp_is_parsed():
     assert a.saves == 9
     # 90 % -> 0.9
     assert abs(a.save_pct - 0.9) < 1e-9
-
-
-def test_swedish_month_and_time_with_dot_are_parsed():
-    html = """
-    <html><body>
-      <span id="ctl00_PlaceHolderMain_lblHomeTeam">Hemma</span>
-      <span id="ctl00_PlaceHolderMain_lblAwayTeam">Borta</span>
-      <span id="ctl00_PlaceHolderMain_lblMatchDate">5 oktober 2023 kl. 19.30</span>
-    </body></html>
-    """
-    doc = _soup(html)
-    game, apps = parse_game(doc, url="http://example.test/fixture?matchid=987")
-    assert isinstance(game.date, datetime)
-    assert game.date == datetime(2023, 10, 5, 19, 30)
-    assert apps == []
