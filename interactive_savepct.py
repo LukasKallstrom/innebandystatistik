@@ -276,6 +276,11 @@ def prepare_cumulative_save_percentages(
         m.loc[pos_mask, "cumulative_saves"] / m.loc[pos_mask, "cumulative_shots"]
     )
 
+    # Plotly (via orjson) kan inte serialisera pd.NA, så konvertera till vanliga
+    # flyttal/NaN innan vi bygger figuren. pd.to_numeric gör att eventuella
+    # pd.NA och andra icke-numeriska värden blir NaN.
+    m["cumulative_save_pct"] = pd.to_numeric(m["cumulative_save_pct"], errors="coerce")
+
     # Släng målvakter med 0 skott totalt (listan visas i panelen)
     shot_sum_by_goalie = m.groupby("goalie")["shots_against"].transform("sum")
     has_any_shots = shot_sum_by_goalie > 0
