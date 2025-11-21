@@ -57,6 +57,7 @@ def run(
 
 def main(argv: Iterable[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config", required=True, help="Path to JSON config describing games")
     parser.add_argument(
         "--fixture-url",
         default="http://statistik.innebandy.se/ft.aspx?scr=fixturelist&ftid=40701",
