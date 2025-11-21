@@ -1,27 +1,13 @@
-"""Command line interface for parsing goalie stats from HTML files."""
+"""Command line interface for downloading and summarising goalie stats."""
 from __future__ import annotations
 
 import argparse
 import json
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable
 
-from innebandy import ParsingError, parse_goalie_table, summarize_goalies
-
-
-def _load_config(path: Path) -> List[Dict[str, Any]]:
-    payload = json.loads(path.read_text())
-    if not isinstance(payload, list):
-        raise SystemExit("Config must be a JSON array")
-    return payload
-
-
-def _load_html(entry: Dict[str, Any], base_dir: Path) -> str:
-    if "html" in entry:
-        return entry["html"]
-    if "html_path" in entry:
-        return (base_dir / entry["html_path"]).read_text()
-    raise SystemExit("Each config entry needs an 'html' or 'html_path' field")
+from innebandy import summarize_goalies
+from innebandy.scraper import collect_goalie_stats, default_fetch
 
 
 def _appearance_to_dict(appearance) -> Dict[str, Any]:
@@ -52,28 +38,13 @@ def _summary_to_dict(summary) -> Dict[str, Any]:
     }
 
 
-def run(config_path: Path, output_path: Path) -> Dict[str, Any]:
-    base_dir = config_path.parent
-    config = _load_config(config_path)
-    appearances = []
-    for entry in config:
-        if not isinstance(entry, dict):
-            raise SystemExit("Config entries must be objects")
-        game_id = entry.get("id")
-        home = entry.get("home")
-        away = entry.get("away")
-        if not game_id:
-            raise SystemExit("Each entry requires an 'id' field")
-        if not entry.get("team_column", True) and not (home and away):
-            raise SystemExit("Home and away must be provided when team column is missing")
-        html = _load_html(entry, base_dir)
-        try:
-            appearances.extend(
-                parse_goalie_table(html, game_id=game_id, home_team=home, away_team=away)
-            )
-        except ParsingError as exc:
-            raise SystemExit(f"Failed to parse game {game_id}: {exc}") from exc
-
+def run(
+    fixture_url: str,
+    output_path: Path,
+    *,
+    fetcher=default_fetch,
+) -> Dict[str, Any]:
+    appearances = collect_goalie_stats(fixture_url, fetcher=fetcher)
     appearances.sort(key=lambda a: (a.game_id, a.team.lower(), a.goalie.lower()))
     summaries = summarize_goalies(appearances)
     payload = {
@@ -88,10 +59,15 @@ def main(argv: Iterable[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True, help="Path to JSON config describing games")
     parser.add_argument(
+        "--fixture-url",
+        default="http://statistik.innebandy.se/ft.aspx?scr=fixturelist&ftid=40701",
+        help="Fixture list URL to scan for games",
+    )
+    parser.add_argument(
         "--output", default="stats.json", help="Destination for rendered JSON output"
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
-    run(Path(args.config), Path(args.output))
+    run(args.fixture_url, Path(args.output))
 
 
 if __name__ == "__main__":
