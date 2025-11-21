@@ -24,7 +24,6 @@ import contextlib
 import logging
 import re
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Iterator, List, Optional
 from urllib.parse import urljoin, urlparse
@@ -65,15 +64,6 @@ AWAY_SELECTORS = [
     "div#awayTeam",
     "td.awayTeamName",
 ]
-DATE_SELECTORS = [
-    "span#ctl00_PlaceHolderMain_lblMatchDate",
-    "#iMatchInfo tbody tr:has(td:-soup-contains('Tid')) td:nth-of-type(2) span",  # date/time in Matchinformation
-    "div.gameHeader .date",
-    "div#matchDate",
-    "td:-soup-contains('Spelades')",
-    #"td:matches((?i)spelades|date)",
-]
-
 # Links and ids
 GAME_LINK_KEYWORDS = ["scr=game", "scr=result", "matchid=", "fmid=", "gameid="]
 GAME_ID_PATTERNS = [
@@ -115,7 +105,6 @@ GOALIE_METRIC_HEADERS = (
 class Game:
     game_id: str
     url: str
-    date: Optional[datetime]
     home_team: Optional[str]
     away_team: Optional[str]
 
@@ -129,7 +118,6 @@ class Appearance:
     shots_against: Optional[int]
     goals_against: Optional[int]
     save_pct: Optional[float]
-    time_on_ice_seconds: Optional[int]
 
 
 # -------------------------
@@ -202,37 +190,6 @@ def first_text(doc: BeautifulSoup, selectors: Iterable[str]) -> Optional[str]:
             text = element.get_text(" ", strip=True)
             if text:
                 return re.sub(r"\s+", " ", text)
-    return None
-
-
-def parse_date(raw: Optional[str]) -> Optional[datetime]:
-    if not raw:
-        return None
-    for fmt in ("%Y-%m-%d", "%Y-%m-%d %H:%M", "%d %B %Y", "%Y-%m-%d %H:%M:%S"):
-        with contextlib.suppress(ValueError):
-            return datetime.strptime(raw, fmt)
-    # dateutil offers better coverage but is an optional dependency, so only
-    # import it when we truly need to.
-    with contextlib.suppress(ImportError, ValueError):
-        from dateutil import parser as date_parser
-
-        return date_parser.parse(raw)
-    return None
-
-
-def time_to_seconds(raw: str | None) -> Optional[int]:
-    if not raw:
-        return None
-    parts = raw.strip().split(":")
-    try:
-        if len(parts) == 2:
-            minutes, seconds = map(int, parts)
-            return minutes * 60 + seconds
-        if len(parts) == 3:
-            hours, minutes, seconds = map(int, parts)
-            return hours * 3600 + minutes * 60 + seconds
-    except ValueError:
-        return None
     return None
 
 
@@ -455,11 +412,6 @@ def parse_goalie_rows(
         saves = to_int(cells[saves_idx]) if (saves_idx is not None and saves_idx < len(cells)) else None
         shots = to_int(cells[shots_idx]) if (shots_idx is not None and shots_idx < len(cells)) else None
         goals = to_int(cells[goals_idx]) if (goals_idx is not None and goals_idx < len(cells)) else None
-        toi = None
-        time_idx = find_index("tid", "toi")
-        if time_idx is not None and time_idx < len(cells):
-            toi = time_to_seconds(cells[time_idx])
-
         # derive saves if missing
         if saves is None and shots is not None and goals is not None:
             saves = shots - goals
@@ -489,7 +441,6 @@ def parse_goalie_rows(
             shots_against=shots,
             goals_against=goals,
             save_pct=pct,
-            time_on_ice_seconds=toi,
         )
 
 # ---------- Player tables filtered by Pos.=MV/Målvakt (fallback)
@@ -601,19 +552,16 @@ def parse_goalies_from_player_table(
             shots_against=shots,
             goals_against=ga,
             save_pct=pct,
-            time_on_ice_seconds=None,  # Usually not present in this view
         )
 
 
 def parse_game(doc: BeautifulSoup, url: str) -> tuple[Game, List[Appearance]]:
     game_id = parse_game_id(url)
-    date_text = first_text(doc, DATE_SELECTORS)
     home = first_text(doc, TEAM_SELECTORS)
     away = first_text(doc, AWAY_SELECTORS)
     game = Game(
         game_id=game_id,
         url=url,
-        date=parse_date(date_text),
         home_team=home,
         away_team=away,
     )
@@ -660,7 +608,6 @@ def appearances_to_frame(appearances: Iterable[Appearance]) -> pd.DataFrame:
             "shots_against": app.shots_against,
             "goals_against": app.goals_against,
             "save_pct": app.save_pct,
-            "time_on_ice_seconds": app.time_on_ice_seconds,
         }
         for app in appearances
     ]
@@ -672,7 +619,6 @@ def games_to_frame(games: Iterable[Game]) -> pd.DataFrame:
         {
             "game_id": game.game_id,
             "url": game.url,
-            "date": game.date,
             "home_team": game.home_team,
             "away_team": game.away_team,
         }

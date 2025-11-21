@@ -1,33 +1,17 @@
 # test_main.py
 import re
-from datetime import datetime
-from bs4 import BeautifulSoup
+import pytest
+
+try:
+    from bs4 import BeautifulSoup
+except ImportError:  # pragma: no cover - optional dependency in test env
+    pytest.skip("beautifulsoup4 is required for these tests", allow_module_level=True)
 
 from main import parse_game, Appearance
 
 
 def _soup(html: str) -> BeautifulSoup:
     return BeautifulSoup(html, "lxml")
-
-
-def test_match_time_extraction_handles_comment_between_date_and_time():
-    """The match time lives in Matchinformation with an HTML comment separator."""
-
-    html = """
-    <html><body>
-      <table class="clCommonGrid" id="iMatchInfo">
-        <tbody>
-          <tr>
-            <td>Tid</td>
-            <td><span>2025-09-20<!-- br ok --> 14:00</span></td>
-          </tr>
-        </tbody>
-      </table>
-    </body></html>
-    """
-    doc = _soup(html)
-    game, _ = parse_game(doc, url="http://example.test/game?matchid=1")
-    assert game.date == datetime(2025, 9, 20, 14, 0)
 
 
 def test_player_table_fallback_pos_mv_parsing():
@@ -74,8 +58,6 @@ def test_player_table_fallback_pos_mv_parsing():
     # Metadata
     assert game.home_team == "FBC Partille"
     assert game.away_team == "IBK Lidköping"
-    assert isinstance(game.date, datetime)
-
     # Två målvakter, en per lag
     assert len(apps) == 2
     # Hemma
@@ -97,9 +79,6 @@ def test_player_table_fallback_pos_mv_parsing():
     # "72,7%" -> 0.727
     assert abs(a_away.save_pct - 0.727) < 1e-6
 
-    # TOI saknas i dessa tabeller -> None
-    assert a_home.time_on_ice_seconds is None
-    assert a_away.time_on_ice_seconds is None
 
 
 def test_explicit_goalie_table_path_kept():
@@ -142,8 +121,6 @@ def test_explicit_goalie_table_path_kept():
 
     assert game.home_team == "Lag A"
     assert game.away_team == "Lag B"
-    assert game.date.year == 2021
-
     # Två rader (två tabeller, en per lag)
     assert len(apps) == 2
     # Kontrollera första
@@ -152,11 +129,7 @@ def test_explicit_goalie_table_path_kept():
     assert a0.goals_against == 2
     assert a0.saves == 16  # härleds från 18-2 om 'Räddningar' ej finns
     assert abs(a0.save_pct - 0.88) < 1e-9
-    # Tid "60:00" -> 3600
-    assert a0.time_on_ice_seconds == 3600
-
     a1 = next(a for a in apps if a.goalie_name == "B Keeper")
-    assert a1.time_on_ice_seconds == 59 * 60 + 12
 
 
 def test_percent_with_spaces_and_nbsp_is_parsed():
