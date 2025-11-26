@@ -7,6 +7,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" />
     <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
       :root {
         color-scheme: light dark;
@@ -185,6 +186,33 @@
         color: rgba(226, 232, 240, 0.7);
       }
 
+      .table-wrapper {
+        overflow-x: auto;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        border-radius: 14px;
+        margin-top: 1rem;
+      }
+
+      .table-wrapper table {
+        margin: 0;
+        min-width: 760px;
+      }
+
+      .helper-text {
+        color: rgba(226, 232, 240, 0.75);
+        margin: 0;
+      }
+
+      .pill {
+        display: inline-block;
+        padding: 0.25rem 0.65rem;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.2);
+        color: white;
+        font-size: 0.85rem;
+        margin-left: 0.5rem;
+      }
+
       @media (max-width: 768px) {
         .controls label {
           width: 100%;
@@ -260,12 +288,186 @@
         </table>
         <p class="empty-state" id="table-empty" hidden>No goalies match the current filters.</p>
       </section>
+
+      <section class="panel">
+        <h2>
+          Appearances from Excel
+          <span class="pill">goalie_stats.xlsx → appearances</span>
+        </h2>
+        <p class="helper-text">
+          Browse the raw goalie appearance rows straight from the Excel export. You can filter, search, sort, and reset without
+          downloading anything.
+        </p>
+        <div class="controls">
+          <label>
+            Search goalie or team
+            <input id="appearance-search" type="search" placeholder="e.g. Albin or Partille" />
+          </label>
+          <label>
+            Team filter
+            <select id="appearance-team-filter">
+              <option value="ALL">All teams</option>
+            </select>
+          </label>
+          <label>
+            Minimum shots against
+            <input id="appearance-min-shots" type="number" min="0" value="0" />
+          </label>
+          <button id="appearance-reset" type="button">Reset filters</button>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th class="sortable" data-appearance-key="game_id">Game ID</th>
+                <th class="sortable" data-appearance-key="team">Team</th>
+                <th class="sortable" data-appearance-key="goalie">Goalie</th>
+                <th class="sortable" data-appearance-key="shots_against">Shots</th>
+                <th class="sortable" data-appearance-key="saves">Saves</th>
+                <th class="sortable" data-appearance-key="goals_against">Goals Against</th>
+                <th class="sortable" data-appearance-key="save_pct_value">Save%</th>
+                <th class="sortable" data-appearance-key="time_on_ice_seconds">Time on ice</th>
+              </tr>
+            </thead>
+            <tbody id="appearances-body"></tbody>
+          </table>
+        </div>
+        <p class="helper-text" id="appearances-loading">Loading goalie_stats.xlsx…</p>
+        <p class="empty-state" id="appearances-empty" hidden>No appearances match the current filters.</p>
+      </section>
     </div>
 
     <script>
       const summaryData = [{"team": "FBC Partille", "goalie": "Robin Pagoldh (25 år)", "games_played": 9, "total_shots": 99, "total_saves": 77, "goals_against": 22, "final_save_pct": 0.7777777777777778, "avg_shots_per_game": 11.0, "save_pct_display": "77.8%"}, {"team": "Fagerhult Habo IBK", "goalie": "Alvin Eckert (18 år)", "games_played": 9, "total_shots": 63, "total_saves": 51, "goals_against": 12, "final_save_pct": 0.8095238095238095, "avg_shots_per_game": 7.0, "save_pct_display": "81.0%"}, {"team": "Fagerhult Habo IBK", "goalie": "Johan Ringqvist (27 år)", "games_played": 9, "total_shots": 26, "total_saves": 16, "goals_against": 10, "final_save_pct": 0.6153846153846154, "avg_shots_per_game": 2.888888888888889, "save_pct_display": "61.5%"}, {"team": "Floda IBK", "goalie": "Joel Andersson (18 år)", "games_played": 5, "total_shots": 37, "total_saves": 29, "goals_against": 8, "final_save_pct": 0.7837837837837838, "avg_shots_per_game": 7.4, "save_pct_display": "78.4%"}, {"team": "Floda IBK", "goalie": "Kalle Lundgren (25 år)", "games_played": 5, "total_shots": 23, "total_saves": 20, "goals_against": 3, "final_save_pct": 0.8695652173913043, "avg_shots_per_game": 4.6, "save_pct_display": "87.0%"}, {"team": "Floda IBK", "goalie": "Phoenix Wigilius (19 år)", "games_played": 7, "total_shots": 46, "total_saves": 36, "goals_against": 10, "final_save_pct": 0.782608695652174, "avg_shots_per_game": 6.571428571428571, "save_pct_display": "78.3%"}, {"team": "Fristads GoIF", "goalie": "Erik Christoffersson (22 år)", "games_played": 9, "total_shots": 173, "total_saves": 140, "goals_against": 33, "final_save_pct": 0.8092485549132948, "avg_shots_per_game": 19.22222222222222, "save_pct_display": "80.9%"}, {"team": "IBF Backadalen", "goalie": "Kasper Landström (20 år)", "games_played": 6, "total_shots": 14, "total_saves": 10, "goals_against": 4, "final_save_pct": 0.7142857142857143, "avg_shots_per_game": 2.3333333333333335, "save_pct_display": "71.4%"}, {"team": "IBF Backadalen", "goalie": "Lukas Källström (25 år)", "games_played": 6, "total_shots": 97, "total_saves": 89, "goals_against": 8, "final_save_pct": 0.9175257731958762, "avg_shots_per_game": 16.166666666666668, "save_pct_display": "91.8%"}, {"team": "IBF Backadalen", "goalie": "Oscar Larsson (21 år)", "games_played": 6, "total_shots": 81, "total_saves": 61, "goals_against": 20, "final_save_pct": 0.7530864197530864, "avg_shots_per_game": 13.5, "save_pct_display": "75.3%"}, {"team": "IBK Alingsås", "goalie": "Albin Flöjner (21 år)", "games_played": 9, "total_shots": 54, "total_saves": 35, "goals_against": 19, "final_save_pct": 0.6481481481481481, "avg_shots_per_game": 6.0, "save_pct_display": "64.8%"}, {"team": "IBK Alingsås", "goalie": "Vincent Sohlström (32 år)", "games_played": 9, "total_shots": 78, "total_saves": 56, "goals_against": 22, "final_save_pct": 0.717948717948718, "avg_shots_per_game": 8.666666666666666, "save_pct_display": "71.8%"}, {"team": "IBK Göteborg", "goalie": "Martinus Martinsson (21 år)", "games_played": 9, "total_shots": 29, "total_saves": 19, "goals_against": 10, "final_save_pct": 0.6551724137931034, "avg_shots_per_game": 3.2222222222222223, "save_pct_display": "65.5%"}, {"team": "IBK Göteborg", "goalie": "Oskar Adler (31 år)", "games_played": 9, "total_shots": 76, "total_saves": 55, "goals_against": 21, "final_save_pct": 0.7236842105263158, "avg_shots_per_game": 8.444444444444445, "save_pct_display": "72.4%"}, {"team": "IBK Kungälv", "goalie": "Johan Ljungberg (29 år)", "games_played": 9, "total_shots": 70, "total_saves": 49, "goals_against": 21, "final_save_pct": 0.7, "avg_shots_per_game": 7.777777777777778, "save_pct_display": "70.0%"}, {"team": "IBK Kungälv", "goalie": "Johan Svensson (30 år)", "games_played": 8, "total_shots": 35, "total_saves": 26, "goals_against": 9, "final_save_pct": 0.7428571428571429, "avg_shots_per_game": 4.375, "save_pct_display": "74.3%"}, {"team": "IBK Lidköping", "goalie": "Emil Lundberg (25 år)", "games_played": 8, "total_shots": 139, "total_saves": 107, "goals_against": 32, "final_save_pct": 0.7697841726618705, "avg_shots_per_game": 17.375, "save_pct_display": "77.0%"}, {"team": "IBK Lidköping", "goalie": "Liam Eriksson (17 år)", "games_played": 9, "total_shots": 56, "total_saves": 45, "goals_against": 11, "final_save_pct": 0.8035714285714286, "avg_shots_per_game": 6.222222222222222, "save_pct_display": "80.4%"}, {"team": "Mullsjö AIS Utveckling", "goalie": "David Vik (29 år)", "games_played": 3, "total_shots": 19, "total_saves": 11, "goals_against": 8, "final_save_pct": 0.5789473684210527, "avg_shots_per_game": 6.333333333333333, "save_pct_display": "57.9%"}, {"team": "Mullsjö AIS Utveckling", "goalie": "Elliot Järn (19 år)", "games_played": 10, "total_shots": 96, "total_saves": 71, "goals_against": 25, "final_save_pct": 0.7395833333333334, "avg_shots_per_game": 9.6, "save_pct_display": "74.0%"}, {"team": "Mullsjö AIS Utveckling", "goalie": "Isak Dorell (22 år)", "games_played": 7, "total_shots": 20, "total_saves": 14, "goals_against": 6, "final_save_pct": 0.7, "avg_shots_per_game": 2.857142857142857, "save_pct_display": "70.0%"}, {"team": "Pixbo IBF", "goalie": "Elmer Arne (18 år)", "games_played": 9, "total_shots": 155, "total_saves": 117, "goals_against": 38, "final_save_pct": 0.7548387096774194, "avg_shots_per_game": 17.22222222222222, "save_pct_display": "75.5%"}, {"team": "Särö IBK", "goalie": "Simon Kure (22 år)", "games_played": 9, "total_shots": 52, "total_saves": 37, "goals_against": 15, "final_save_pct": 0.7115384615384616, "avg_shots_per_game": 5.777777777777778, "save_pct_display": "71.2%"}];
       const goalieToTeam = {"Albin Flöjner (21 år)": "IBK Alingsås", "Alvin Eckert (18 år)": "Fagerhult Habo IBK", "David Vik (29 år)": "Mullsjö AIS Utveckling", "Elliot Järn (19 år)": "Mullsjö AIS Utveckling", "Elmer Arne (18 år)": "Pixbo IBF", "Emil Lundberg (25 år)": "IBK Lidköping", "Erik Christoffersson (22 år)": "Fristads GoIF", "Isak Dorell (22 år)": "Mullsjö AIS Utveckling", "Joel Andersson (18 år)": "Floda IBK", "Johan Ljungberg (29 år)": "IBK Kungälv", "Johan Ringqvist (27 år)": "Fagerhult Habo IBK", "Johan Svensson (30 år)": "IBK Kungälv", "Kalle Lundgren (25 år)": "Floda IBK", "Kasper Landström (20 år)": "IBF Backadalen", "Liam Eriksson (17 år)": "IBK Lidköping", "Lukas Källström (25 år)": "IBF Backadalen", "Martinus Martinsson (21 år)": "IBK Göteborg", "Oscar Larsson (21 år)": "IBF Backadalen", "Oskar Adler (31 år)": "IBK Göteborg", "Phoenix Wigilius (19 år)": "Floda IBK", "Robin Pagoldh (25 år)": "FBC Partille", "Simon Kure (22 år)": "Särö IBK", "Vincent Sohlström (32 år)": "IBK Alingsås"};
       const traceGoalies = ["Martinus Martinsson (21 år)", "Oskar Adler (31 år)", "Erik Christoffersson (22 år)", "Johan Svensson (30 år)", "Johan Ljungberg (29 år)", "Alvin Eckert (18 år)", "Johan Ringqvist (27 år)", "Simon Kure (22 år)", "Elmer Arne (18 år)", "Robin Pagoldh (25 år)", "Liam Eriksson (17 år)", "Oscar Larsson (21 år)", "Kasper Landström (20 år)", "David Vik (29 år)", "Elliot Järn (19 år)", "Phoenix Wigilius (19 år)", "Joel Andersson (18 år)", "Vincent Sohlström (32 år)", "Albin Flöjner (21 år)", "Emil Lundberg (25 år)", "Isak Dorell (22 år)", "Lukas Källström (25 år)", "Kalle Lundgren (25 år)"];
+
+      const appearanceState = {
+        rows: [],
+        sort: { key: 'shots_against', ascending: false },
+      };
+
+      function formatSavePct(value) {
+        if (value === null || value === undefined || value === '') return '–';
+        const num = Number(value);
+        if (Number.isNaN(num)) return '–';
+        const pct = num > 1 ? num : num * 100;
+        return `${pct.toFixed(1)} %`;
+      }
+
+      function formatTimeOnIce(seconds) {
+        const num = Number(seconds);
+        if (!Number.isFinite(num) || num < 0) return '–';
+        const mins = Math.floor(num / 60);
+        const secs = Math.round(num % 60);
+        const hours = Math.floor(mins / 60);
+        const remMins = mins % 60;
+        if (hours) {
+          return `${hours}:${String(remMins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        }
+        return `${remMins}:${String(secs).padStart(2, '0')}`;
+      }
+
+      function normalizeAppearanceRow(row) {
+        const savePctValue = row.save_pct === '' ? null : Number(row.save_pct);
+        const toiSeconds = row.time_on_ice_seconds === '' ? null : Number(row.time_on_ice_seconds);
+        return {
+          ...row,
+          shots_against: row.shots_against ?? row.shots ?? null,
+          save_pct_value: Number.isFinite(savePctValue) ? savePctValue : null,
+          save_pct_display: formatSavePct(row.save_pct),
+          time_on_ice_seconds: Number.isFinite(toiSeconds) ? toiSeconds : row.time_on_ice_seconds,
+          time_on_ice_display: formatTimeOnIce(row.time_on_ice_seconds),
+        };
+      }
+
+      async function loadAppearancesFromExcel() {
+        const response = await fetch('goalie_stats.xlsx');
+        if (!response.ok) {
+          throw new Error(`Failed to fetch goalie_stats.xlsx (status ${response.status})`);
+        }
+        const buffer = await response.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: 'array' });
+        const sheet = workbook.Sheets['appearances'];
+        if (!sheet) {
+          throw new Error('Workbook missing "appearances" sheet');
+        }
+        const rows = XLSX.utils.sheet_to_json(sheet, { defval: null });
+        return rows.map(normalizeAppearanceRow);
+      }
+
+      function populateAppearanceTeams(rows) {
+        const select = document.getElementById('appearance-team-filter');
+        const teams = Array.from(new Set(rows.map((row) => row.team).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+        teams.forEach((team) => {
+          const option = document.createElement('option');
+          option.value = team;
+          option.textContent = team;
+          select.appendChild(option);
+        });
+      }
+
+      function applyAppearanceFilters(rows) {
+        const search = document.getElementById('appearance-search').value.trim().toLowerCase();
+        const team = document.getElementById('appearance-team-filter').value;
+        const minShots = Number(document.getElementById('appearance-min-shots').value) || 0;
+
+        return rows.filter((row) => {
+          const matchesSearch =
+            !search ||
+            (row.goalie && row.goalie.toLowerCase().includes(search)) ||
+            (row.team && row.team.toLowerCase().includes(search)) ||
+            (row.game_id && String(row.game_id).toLowerCase().includes(search));
+          const matchesTeam = team === 'ALL' || row.team === team;
+          const meetsShots = (row.shots_against ?? 0) >= minShots;
+          return matchesSearch && matchesTeam && meetsShots;
+        });
+      }
+
+      function renderAppearanceTable(rows) {
+        const tbody = document.getElementById('appearances-body');
+        const emptyState = document.getElementById('appearances-empty');
+        const loadingNote = document.getElementById('appearances-loading');
+        tbody.innerHTML = '';
+
+        if (!appearanceState.rows.length) {
+          emptyState.hidden = true;
+          loadingNote.hidden = false;
+          return;
+        }
+
+        loadingNote.hidden = false;
+        loadingNote.textContent = `Showing ${rows.length} of ${appearanceState.rows.length} appearance rows from Excel.`;
+        if (!rows.length) {
+          emptyState.hidden = false;
+          return;
+        }
+
+        emptyState.hidden = true;
+        const fragment = document.createDocumentFragment();
+        rows.forEach((row) => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${row.game_id || '—'}</td>
+            <td>${row.team || 'Unknown'}</td>
+            <td>${row.goalie || 'Unknown'}</td>
+            <td>${row.shots_against ?? '–'}</td>
+            <td>${row.saves ?? '–'}</td>
+            <td>${row.goals_against ?? '–'}</td>
+            <td>${row.save_pct_display}</td>
+            <td>${row.time_on_ice_display}</td>`;
+          fragment.appendChild(tr);
+        });
+        tbody.appendChild(fragment);
+      }
+
+      function updateAppearanceTable() {
+        const filtered = applyAppearanceFilters(appearanceState.rows);
+        const sorted = filtered.sort(sortBy(appearanceState.sort.key, appearanceState.sort.ascending));
+        renderAppearanceTable(sorted);
+      }
+
+
 
       function renderTable(rows) {
         const tbody = document.getElementById('summary-table-body');
@@ -355,7 +557,7 @@
           });
         });
 
-        document.querySelectorAll('th.sortable').forEach((th) => {
+        document.querySelectorAll('th.sortable[data-key]').forEach((th) => {
           th.addEventListener('click', () => {
             const key = th.dataset.key;
             if (sortState.key === key) {
@@ -370,6 +572,45 @@
 
         Plotly.d3.select('#savepct-chart').on('plotly_doubleclick', () => {
           document.getElementById('reset-view').click();
+        });
+
+        loadAppearancesFromExcel()
+          .then((rows) => {
+            appearanceState.rows = rows;
+            populateAppearanceTeams(rows);
+            updateAppearanceTable();
+          })
+          .catch((error) => {
+            console.error(error);
+            const loadingNote = document.getElementById('appearances-loading');
+            loadingNote.hidden = false;
+            loadingNote.textContent =
+              'Could not load goalie_stats.xlsx. Please keep the Excel file next to this page and reload to explore appearances.';
+          });
+
+        document.getElementById('appearance-search').addEventListener('input', updateAppearanceTable);
+        document.getElementById('appearance-team-filter').addEventListener('change', updateAppearanceTable);
+        document.getElementById('appearance-min-shots').addEventListener('input', updateAppearanceTable);
+
+        document.getElementById('appearance-reset').addEventListener('click', () => {
+          appearanceState.sort = { key: 'shots_against', ascending: false };
+          document.getElementById('appearance-search').value = '';
+          document.getElementById('appearance-team-filter').value = 'ALL';
+          document.getElementById('appearance-min-shots').value = '0';
+          updateAppearanceTable();
+        });
+
+        document.querySelectorAll('th[data-appearance-key]').forEach((th) => {
+          th.addEventListener('click', () => {
+            const key = th.dataset.appearanceKey;
+            if (!key) return;
+            if (appearanceState.sort.key === key) {
+              appearanceState.sort.ascending = !appearanceState.sort.ascending;
+            } else {
+              appearanceState.sort = { key, ascending: key === 'game_id' || key === 'goalie' || key === 'team' };
+            }
+            updateAppearanceTable();
+          });
         });
       });
     </script>
