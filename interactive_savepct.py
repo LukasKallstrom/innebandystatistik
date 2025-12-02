@@ -4,8 +4,10 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
+from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 import pandas as pd
 import requests
@@ -392,27 +394,40 @@ def summarise_goalies(cumulative: pd.DataFrame) -> pd.DataFrame:
     return summary
 
 
-def build_dashboard_html(
+@dataclass
+class LeagueSnapshot:
+    key: str
+    name: str
+    figure: Dict
+    summary_records: List[dict]
+    goalie_to_team: Dict[str, str]
+    trace_goalies: List[str]
+    team_options: List[str]
+    dropped_goalies: List[str]
+    stats: Dict[str, object]
+
+
+def _slugify(text: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+    return slug or "league"
+
+
+def _date_range_text(cumulative: pd.DataFrame) -> str:
+    date_min = pd.to_datetime(cumulative["date"]).min()
+    date_max = pd.to_datetime(cumulative["date"]).max()
+    if pd.notna(date_min) and pd.notna(date_max):
+        return f"{date_min.date().isoformat()} → {date_max.date().isoformat()}"
+    return "–"
+
+
+def _build_league_snapshot(
+    name: str,
     figure,
     cumulative: pd.DataFrame,
     summary: pd.DataFrame,
     dropped_goalies: List[str],
-) -> str:
-    """Compose the interactive dashboard HTML shell."""
-
+) -> LeagueSnapshot:
     import plotly.io as pio
-
-    chart_html = pio.to_html(
-        figure,
-        include_plotlyjs=False,
-        full_html=False,
-        div_id="savepct-chart",
-        config={
-            "displaylogo": False,
-            "responsive": True,
-            "modeBarButtonsToRemove": ["lasso2d", "select2d"],
-        },
-    )
 
     cumulative = cumulative.copy()
     cumulative["team"] = cumulative.get("team", "Unknown").fillna("Unknown")
@@ -426,28 +441,42 @@ def build_dashboard_html(
     goalie_to_team = {row.goalie: row.team for row in goalie_team_map.itertuples(index=False)}
 
     team_options = sorted({team for team in cumulative["team"].dropna().unique()})
-
     summary_records = summary.replace({pd.NA: None}).to_dict(orient="records")
 
-    total_goalies = len({row["goalie"] for row in summary_records})
-    total_teams = len(team_options)
-    date_min = pd.to_datetime(cumulative["date"]).min()
-    date_max = pd.to_datetime(cumulative["date"]).max()
-    date_range = "–"
-    if pd.notna(date_min) and pd.notna(date_max):
-        date_range = f"{date_min.date().isoformat()} → {date_max.date().isoformat()}"
+    stats = {
+        "total_goalies": len({row["goalie"] for row in summary_records}),
+        "total_teams": len(team_options),
+        "date_range": _date_range_text(cumulative),
+        "zero_shot_goalies": len(dropped_goalies),
+    }
 
+    figure_json = json.loads(pio.to_json(figure, engine="json"))
+
+    return LeagueSnapshot(
+        key=_slugify(name),
+        name=name,
+        figure=figure_json,
+        summary_records=summary_records,
+        goalie_to_team=goalie_to_team,
+        trace_goalies=[trace.name for trace in figure.data],
+        team_options=team_options,
+        dropped_goalies=dropped_goalies,
+        stats=stats,
+    )
+
+
+def build_dashboard_html(leagues: List[LeagueSnapshot]) -> str:
+    """Compose the interactive dashboard HTML shell."""
+
+    if not leagues:
+        raise ValueError("At least one league is required to build the dashboard")
+
+    first = leagues[0]
     dropdown_options = "".join(
-        f'<option value="{team}">{team}</option>' for team in team_options
+        f'<option value="{team}">{team}</option>' for team in first.team_options
     )
 
-    dropped_html = (
-        ""
-        if not dropped_goalies
-        else "<p class=\"empty-state\">Filtered goalies with zero recorded shots: "
-        + ", ".join(dropped_goalies)
-        + "</p>"
-    )
+    league_json = json.dumps([league.__dict__ for league in leagues], ensure_ascii=False)
 
     return f"""<!DOCTYPE html>
 <html lang=\"en\">
@@ -504,6 +533,36 @@ def build_dashboard_html(
         margin: 0;
         color: rgba(226, 232, 240, 0.85);
         max-width: 60ch;
+      }}
+
+      .league-switcher {{
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+      }}
+
+      .league-switcher label {{
+        font-weight: 600;
+        color: rgba(226, 232, 240, 0.9);
+      }}
+
+      .league-switcher select {{
+        padding: 0.6rem 0.75rem;
+        border-radius: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        background-color: rgba(15, 23, 42, 0.7);
+        color: white;
+        font-size: 0.95rem;
+      }}
+
+      .league-pill {{
+        background: rgba(59, 130, 246, 0.15);
+        border: 1px solid rgba(59, 130, 246, 0.45);
+        padding: 0.45rem 0.85rem;
+        border-radius: 999px;
+        font-weight: 600;
+        letter-spacing: 0.01em;
       }}
 
       .stats-grid {{
@@ -651,24 +710,29 @@ def build_dashboard_html(
       <header>
         <h1>Goalie Save Percentage Dashboard</h1>
         <p>Explore how every goalie performs throughout the season. Filter by team, search for a specific goalie, and inspect a sortable table with the latest cumulative numbers.</p>
+        <div class=\"league-switcher\">
+          <label for=\"league-selector\">League</label>
+          <div class=\"league-pill\" id=\"active-league\">{first.name}</div>
+          <select id=\"league-selector\"></select>
+        </div>
       </header>
 
       <section class=\"stats-grid\">
         <article class=\"stat-card\">
           <h2>Teams tracked</h2>
-          <span>{total_teams}</span>
+          <span id=\"stat-teams\">{first.stats['total_teams']}</span>
         </article>
         <article class=\"stat-card\">
           <h2>Goalies tracked</h2>
-          <span>{total_goalies}</span>
+          <span id=\"stat-goalies\">{first.stats['total_goalies']}</span>
         </article>
         <article class=\"stat-card\">
           <h2>Match coverage</h2>
-          <span>{date_range}</span>
+          <span id=\"stat-coverage\">{first.stats['date_range']}</span>
         </article>
         <article class=\"stat-card\">
           <h2>Zero-shot goalies</h2>
-          <span>{len(dropped_goalies)}</span>
+          <span id=\"stat-zero-shots\">{first.stats['zero_shot_goalies']}</span>
         </article>
       </section>
 
@@ -688,8 +752,8 @@ def build_dashboard_html(
           </label>
           <button id=\"reset-view\" type=\"button\">Reset view</button>
         </div>
-        {chart_html}
-        {dropped_html}
+        <div id=\"savepct-chart\"></div>
+        <p class=\"empty-state\" id=\"dropped-message\" hidden></p>
       </section>
 
       <section class=\"panel\">
@@ -714,9 +778,45 @@ def build_dashboard_html(
     </div>
 
     <script>
-      const summaryData = {json.dumps(summary_records, ensure_ascii=False)};
-      const goalieToTeam = {json.dumps(goalie_to_team, ensure_ascii=False)};
-      const traceGoalies = {json.dumps([trace.name for trace in figure.data], ensure_ascii=False)};
+      const leagues = {league_json};
+      const plotConfig = {{"displaylogo": false, "responsive": true, "modeBarButtonsToRemove": ["lasso2d", "select2d"]}};
+      let summaryData = leagues[0].summary_records;
+      let goalieToTeam = leagues[0].goalie_to_team;
+      let traceGoalies = leagues[0].trace_goalies;
+      let sortState = {{ key: 'team', ascending: true }};
+
+      function populateLeagueSelector() {{
+        const selector = document.getElementById('league-selector');
+        selector.innerHTML = leagues
+          .map((league) => `<option value="${{league.key}}">${{league.name}}</option>`)
+          .join('');
+        selector.value = leagues[0].key;
+      }}
+
+      function updateStats(stats, leagueName) {{
+        document.getElementById('active-league').textContent = leagueName;
+        document.getElementById('stat-teams').textContent = stats.total_teams;
+        document.getElementById('stat-goalies').textContent = stats.total_goalies;
+        document.getElementById('stat-coverage').textContent = stats.date_range;
+        document.getElementById('stat-zero-shots').textContent = stats.zero_shot_goalies;
+      }}
+
+      function updateDroppedMessage(goalies) {{
+        const dropped = document.getElementById('dropped-message');
+        if (!goalies.length) {{
+          dropped.hidden = true;
+          dropped.textContent = '';
+          return;
+        }}
+        dropped.hidden = false;
+        dropped.textContent = `Filtered goalies with zero recorded shots: ${goalies.join(', ')}`;
+      }}
+
+      function updateTeamOptions(options) {{
+        const select = document.getElementById('team-filter');
+        const opts = ['<option value="ALL">All teams</option>', ...options.map((team) => `<option value="${team}">${team}</option>`)];
+        select.innerHTML = opts.join('');
+      }}
 
       function renderTable(rows) {{
         const tbody = document.getElementById('summary-table-body');
@@ -780,9 +880,31 @@ def build_dashboard_html(
         }};
       }}
 
-      window.addEventListener('DOMContentLoaded', () => {{
-        let sortState = {{ key: 'team', ascending: true }};
+      function loadLeague(key) {{
+        const league = leagues.find((candidate) => candidate.key === key) || leagues[0];
+        summaryData = league.summary_records;
+        goalieToTeam = league.goalie_to_team;
+        traceGoalies = league.trace_goalies;
+        sortState = {{ key: 'team', ascending: true }};
+        updateStats(league.stats, league.name);
+        updateTeamOptions(league.team_options);
+        updateDroppedMessage(league.dropped_goalies);
+        document.getElementById('team-filter').value = 'ALL';
+        document.getElementById('goalie-search').value = '';
         renderTable(summaryData.sort(sortBy(sortState.key, sortState.ascending)));
+        Plotly.react('savepct-chart', league.figure.data, league.figure.layout, plotConfig);
+        traceGoalies.forEach((_, index) => {{
+          Plotly.restyle('savepct-chart', {{ visible: true }}, [index]);
+        }});
+      }}
+
+      window.addEventListener('DOMContentLoaded', () => {{
+        populateLeagueSelector();
+        loadLeague(leagues[0].key);
+
+        document.getElementById('league-selector').addEventListener('change', (event) => {{
+          loadLeague(event.target.value);
+        }});
 
         document.getElementById('team-filter').addEventListener('change', () => {{
           const filtered = applyFilters(summaryData).sort(sortBy(sortState.key, sortState.ascending));
@@ -819,6 +941,7 @@ def build_dashboard_html(
           }});
         }});
 
+        Plotly.newPlot('savepct-chart', leagues[0].figure.data, leagues[0].figure.layout, plotConfig);
         Plotly.d3.select('#savepct-chart').on('plotly_doubleclick', () => {{
           document.getElementById('reset-view').click();
         }});
@@ -852,6 +975,15 @@ def main() -> None:
         help="Fixture list to scrape when no Excel workbook is supplied.",
     )
     parser.add_argument(
+        "--league",
+        action="append",
+        metavar="NAME=FIXTURE_URL",
+        help=(
+            "Add a league by providing a friendly name and fixture URL in the format "
+            "'Name=https://…'. Repeat the flag for multiple leagues."
+        ),
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=Path("index.html"),
@@ -877,20 +1009,43 @@ def main() -> None:
         datefmt="%H:%M:%S",
     )
 
+    if args.excel and args.league:
+        raise SystemExit("--league cannot be combined with --excel. Provide fixture URLs instead.")
+
+    league_specs = args.league or [f"Primary league={args.season_url}"]
+    league_snapshots: List[LeagueSnapshot] = []
+
     if args.excel:
         if not args.excel.exists():
             raise SystemExit(f"The Excel file {args.excel} does not exist.")
         games_df, appearances_df = load_from_excel(args.excel, debug_csv_dir=args.debug_csv)
+        cumulative, dropped_goalies = prepare_cumulative_save_percentages(games_df, appearances_df)
+        figure = build_figure(cumulative, dropped_goalies)
+        summary = summarise_goalies(cumulative)
+        league_snapshots.append(
+            _build_league_snapshot(args.excel.stem or "Excel data", figure, cumulative, summary, dropped_goalies)
+        )
     else:
-        games_df, appearances_df = scrape_data(args.season_url, debug_csv_dir=args.debug_csv)
+        for spec in league_specs:
+            if "=" not in spec:
+                raise SystemExit("--league values must be in the format 'Name=FIXTURE_URL'")
+            name, url = spec.split("=", 1)
+            name = name.strip() or "League"
+            url = url.strip()
+            games_df, appearances_df = scrape_data(url, debug_csv_dir=args.debug_csv)
+            cumulative, dropped_goalies = prepare_cumulative_save_percentages(games_df, appearances_df)
+            if cumulative.empty:
+                raise SystemExit(f"No cumulative save-percentage data available for {name}.")
+            figure = build_figure(cumulative, dropped_goalies)
+            summary = summarise_goalies(cumulative)
+            league_snapshots.append(
+                _build_league_snapshot(name, figure, cumulative, summary, dropped_goalies)
+            )
 
-    cumulative, dropped_goalies = prepare_cumulative_save_percentages(games_df, appearances_df)
-    if cumulative.empty:
-        raise SystemExit("No cumulative save-percentage data available to plot.")
+    if not league_snapshots:
+        raise SystemExit("No leagues could be processed.")
 
-    figure = build_figure(cumulative, dropped_goalies)
-    summary = summarise_goalies(cumulative)
-    html = build_dashboard_html(figure, cumulative, summary, dropped_goalies)
+    html = build_dashboard_html(league_snapshots)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(html, encoding="utf-8")
