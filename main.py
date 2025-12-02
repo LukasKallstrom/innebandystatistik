@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 # -------------------------
 
 DEFAULT_FIXTURE_URL = (
-    "http://statistik.innebandy.se/ft.aspx?scr=fixturelist&ftid=40701"
+    "http://statistik.innebandy.se/ft.aspx?scr=fixturelist&ftid=40693"
 )
 DEFAULT_OUTPUT = Path("goalie_stats.xlsx")
 DEFAULT_PLOT = Path("goalie_savepct_timeline.png")
