@@ -1,9 +1,8 @@
 # test_main.py
-import re
 from datetime import datetime
 from bs4 import BeautifulSoup
 
-from main import parse_game, Appearance
+from fetch_data import parse_game, Appearance
 
 
 def _soup(html: str) -> BeautifulSoup:
