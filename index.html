@@ -1,352 +1,722 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-    <head>
-      <meta charset="utf-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1" />
-      <title>Goalie Save Percentage Dashboard</title>
-      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" />
-    <style>
-      :root {
-        color-scheme: light dark;
-        --bg: #0f172a;
-        --bg-panel: rgba(15, 23, 42, 0.75);
-        --bg-light: #f8fafc;
-        --border: rgba(148, 163, 184, 0.35);
-        --text: #0f172a;
-        --text-muted: #475569;
-        --accent: #2563eb;
-        font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      }
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Goalie Save Percentage Dashboard</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap">
+  <style>
+    :root {
+      font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #0f172a;
+      background-color: #f8fafc;
+    }
 
-      body {
-        margin: 0;
-        padding: 0;
-        background: linear-gradient(160deg, #020617, #0f172a 55%, #1e293b);
-        color: white;
-        min-height: 100vh;
-      }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at 10% 20%, #dceafe 0, #e2e8f0 35%, #e2e8f0 100%);
+      color: #0f172a;
+    }
 
-      .page {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 2.5rem 1.5rem 4rem;
-        display: flex;
-        flex-direction: column;
-        gap: 2.5rem;
-      }
+    header {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+    }
 
-      header {
-        display: flex;
-        flex-direction: column;
-        gap: 0.75rem;
-      }
+    .page {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2.5rem 1.25rem 3rem;
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+    }
 
-      header h1 {
-        font-size: clamp(1.75rem, 4vw, 2.75rem);
-        margin: 0;
-        letter-spacing: -0.02em;
-      }
+    .hero {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1rem;
+    }
 
-      header p {
-        margin: 0;
-        color: rgba(226, 232, 240, 0.85);
-        max-width: 60ch;
-      }
+    .hero h1 {
+      margin: 0;
+      font-size: clamp(2rem, 4vw, 2.75rem);
+      letter-spacing: -0.02em;
+    }
 
-      .stats-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        gap: 1rem;
-      }
+    .hero p {
+      margin: 0;
+      color: #475569;
+      max-width: 60ch;
+      line-height: 1.5;
+    }
 
-      .stat-card {
-        background: rgba(15, 23, 42, 0.6);
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        padding: 1.25rem 1.4rem;
-        backdrop-filter: blur(8px);
-      }
+    .pill {
+      background: #2563eb1a;
+      color: #1d4ed8;
+      border: 1px solid #bfdbfe;
+      padding: 0.35rem 0.75rem;
+      border-radius: 999px;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
 
-      .stat-card h2 {
-        font-size: 0.9rem;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        margin: 0 0 0.25rem;
-        color: rgba(148, 163, 184, 0.85);
-      }
+    .panel {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 18px;
+      padding: 1.25rem 1.5rem;
+      box-shadow: 0 25px 65px rgba(15, 23, 42, 0.12);
+    }
 
-      .stat-card span {
-        font-size: 1.8rem;
-        font-weight: 600;
-      }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+    }
 
-      .panel {
-        background: rgba(15, 23, 42, 0.65);
-        border: 1px solid var(--border);
-        border-radius: 18px;
-        padding: 1.5rem;
-        box-shadow: 0 25px 45px rgba(15, 23, 42, 0.45);
-        backdrop-filter: blur(12px);
-      }
+    .stat-card {
+      padding: 1.25rem 1rem;
+      border-radius: 14px;
+      border: 1px solid #e2e8f0;
+      background: linear-gradient(160deg, #fff, #f8fafc);
+      display: grid;
+      gap: 0.35rem;
+    }
 
-      .panel h2 {
-        margin-top: 0;
-        font-size: 1.3rem;
-        margin-bottom: 1rem;
-      }
+    .stat-card h2 {
+      margin: 0;
+      font-size: 0.9rem;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
 
-      .controls {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 1rem;
-        margin-bottom: 1rem;
-      }
+    .stat-card strong {
+      font-size: 1.9rem;
+      letter-spacing: -0.02em;
+    }
 
-      .controls label {
-        font-size: 0.9rem;
-        display: flex;
-        flex-direction: column;
-        gap: 0.35rem;
-        color: rgba(226, 232, 240, 0.9);
-      }
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+      align-items: end;
+    }
 
-      .controls select,
-      .controls input {
-        min-width: 240px;
-        padding: 0.6rem 0.75rem;
-        border-radius: 12px;
-        border: 1px solid rgba(148, 163, 184, 0.35);
-        background-color: rgba(15, 23, 42, 0.7);
-        color: white;
-        font-size: 0.95rem;
-      }
+    label {
+      font-size: 0.95rem;
+      display: grid;
+      gap: 0.5rem;
+      color: #0f172a;
+      font-weight: 600;
+    }
 
-      .controls button {
-        align-self: flex-end;
-        padding: 0.6rem 1.1rem;
-        border-radius: 12px;
-        border: none;
-        background: linear-gradient(120deg, rgba(59, 130, 246, 0.9), rgba(99, 102, 241, 0.85));
-        color: white;
-        font-weight: 600;
-        cursor: pointer;
-        transition: transform 0.15s ease, box-shadow 0.15s ease;
-      }
+    select,
+    input[type="search"] {
+      border-radius: 12px;
+      border: 1px solid #cbd5e1;
+      padding: 0.65rem 0.75rem;
+      font-size: 1rem;
+      background: #fff;
+    }
 
-      .controls button:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 15px 30px rgba(59, 130, 246, 0.35);
-      }
+    button {
+      border: none;
+      border-radius: 12px;
+      padding: 0.75rem 1rem;
+      font-size: 1rem;
+      font-weight: 700;
+      background: linear-gradient(120deg, #2563eb, #7c3aed);
+      color: #fff;
+      cursor: pointer;
+      box-shadow: 0 12px 35px rgba(37, 99, 235, 0.35);
+      transition: transform 0.1s ease;
+    }
 
-      #savepct-chart {
-        width: 100%;
-        min-height: 480px;
-      }
+    button:hover {
+      transform: translateY(-1px);
+    }
 
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 1rem;
-        font-size: 0.95rem;
-      }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+      font-size: 0.98rem;
+    }
 
-      thead {
-        text-transform: uppercase;
-        font-size: 0.75rem;
-        letter-spacing: 0.08em;
-        color: rgba(148, 163, 184, 0.8);
-      }
+    thead {
+      background: #f8fafc;
+      position: sticky;
+      top: 0;
+    }
 
-      th, td {
-        padding: 0.65rem 0.5rem;
-        text-align: left;
-        border-bottom: 1px solid rgba(148, 163, 184, 0.2);
-      }
+    th,
+    td {
+      padding: 0.75rem 0.5rem;
+      text-align: left;
+      border-bottom: 1px solid #e2e8f0;
+    }
 
-      tbody tr:hover {
-        background-color: rgba(148, 163, 184, 0.12);
-      }
+    th.sortable {
+      cursor: pointer;
+      user-select: none;
+    }
 
-      th.sortable {
-        cursor: pointer;
-      }
+    th.sortable span {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      color: #475569;
+      font-size: 0.9rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
 
-      th.sortable::after {
-        content: '\25B4\25BE';
-        margin-left: 0.35rem;
-        font-size: 0.75rem;
-        opacity: 0.45;
-      }
+    th.sortable svg {
+      width: 0.9rem;
+      height: 0.9rem;
+      opacity: 0.65;
+    }
 
-      .empty-state {
-        margin: 1.5rem 0 0;
-        color: rgba(226, 232, 240, 0.7);
-      }
+    tbody tr:hover {
+      background: #f8fafc;
+    }
 
-      @media (max-width: 768px) {
-        .controls label {
-          width: 100%;
-        }
-        .controls button {
-          width: 100%;
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <div class="page">
-      <header>
-        <h1>Goalie Save Percentage Dashboard</h1>
-        <p>Explore how every goalie performs throughout the season. Filter by team, search for a specific goalie, and inspect a sortable table with the latest cumulative numbers.</p>
-      </header>
+    .empty-state {
+      margin: 1.25rem 0 0;
+      color: #475569;
+    }
 
-      <section class="stats-grid">
-        <article class="stat-card">
-          <h2>Teams tracked</h2>
-          <span>14</span>
-        </article>
-        <article class="stat-card">
-          <h2>Goalies tracked</h2>
-          <span>27</span>
-        </article>
-        <article class="stat-card">
-          <h2>Match coverage</h2>
-          <span>2000-01-01 → 2000-03-17</span>
-        </article>
-        <article class="stat-card">
-          <h2>Zero-shot goalies</h2>
-          <span>8</span>
-        </article>
-      </section>
+    .table-wrapper {
+      overflow: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="hero">
+      <div>
+        <p class="pill">Floorball goalie tracker</p>
+        <h1>Save percentage dashboard</h1>
+        <p>Filter by team, search for a specific goalie, and sort any column. All numbers come from the Python scraper that ships with this project.</p>
+      </div>
+    </header>
 
-      <section class="panel">
-        <h2>Filter goalies</h2>
-        <div class="controls">
-          <label>
-            Team filter
-            <select id="team-filter">
-              <option value="ALL">All teams</option>
-              <option value="AIK IBF">AIK IBF</option><option value="FBC Kalmarsund">FBC Kalmarsund</option><option value="Hovslätts IK">Hovslätts IK</option><option value="IBF Falun">IBF Falun</option><option value="Jönköpings IK">Jönköpings IK</option><option value="Linköping IBK">Linköping IBK</option><option value="Mullsjö AIS">Mullsjö AIS</option><option value="Nykvarns IBF">Nykvarns IBF</option><option value="Pixbo IBK">Pixbo IBK</option><option value="Storvreta IBK">Storvreta IBK</option><option value="Strängnäs IBK">Strängnäs IBK</option><option value="Visby IBK">Visby IBK</option><option value="Växjö IBK">Växjö IBK</option><option value="Warberg IC">Warberg IC</option>
-            </select>
-          </label>
-          <label>
-            Highlight goalie
-            <input id="goalie-search" type="search" placeholder="Search goalie name…" />
-          </label>
-          <button id="reset-view" type="button">Reset filters</button>
-        </div>
-      </section>
-      <section class="panel">
-        <h2>Sortable goalie table</h2>
+    <section class="stats-grid" aria-label="Summary statistics">
+      <article class="stat-card">
+        <h2>Teams tracked</h2>
+        <strong id="teams-stat">–</strong>
+        <span class="muted">Unique clubs represented in the dataset.</span>
+      </article>
+      <article class="stat-card">
+        <h2>Goalies tracked</h2>
+        <strong id="goalies-stat">–</strong>
+        <span class="muted">Total keeper entries across the season.</span>
+      </article>
+      <article class="stat-card">
+        <h2>Top save%</h2>
+        <strong id="leader-stat">–</strong>
+        <span class="muted">Best cumulative save percentage.</span>
+      </article>
+      <article class="stat-card">
+        <h2>Shots faced</h2>
+        <strong id="shots-stat">–</strong>
+        <span class="muted">Combined shots faced by all goalies.</span>
+      </article>
+    </section>
+
+    <section class="panel" aria-label="Filters">
+      <div class="controls">
+        <label>
+          Team
+          <select id="team-filter"></select>
+        </label>
+        <label>
+          Highlight goalie
+          <input id="goalie-search" type="search" placeholder="Search goalie name…" autocomplete="off">
+        </label>
+        <button id="reset-view" type="button">Reset filters</button>
+      </div>
+    </section>
+
+    <section class="panel" aria-label="Goalie table">
+      <div class="table-wrapper">
         <table>
           <thead>
             <tr>
-              <th class="sortable" data-key="team">Team</th>
-              <th class="sortable" data-key="goalie">Goalie</th>
-              <th class="sortable" data-key="games_played">Games</th>
-              <th class="sortable" data-key="total_shots">Shots</th>
-              <th class="sortable" data-key="total_saves">Saves</th>
-              <th class="sortable" data-key="goals_against">Goals Against</th>
-              <th class="sortable" data-key="avg_shots_per_game">Avg Shots/Game</th>
-              <th class="sortable" data-key="final_save_pct">Cumulative Save%</th>
+              <th class="sortable" data-key="team"><span>Team</span></th>
+              <th class="sortable" data-key="goalie"><span>Goalie</span></th>
+              <th class="sortable" data-key="games_played"><span>Games</span></th>
+              <th class="sortable" data-key="total_shots"><span>Shots</span></th>
+              <th class="sortable" data-key="total_saves"><span>Saves</span></th>
+              <th class="sortable" data-key="goals_against"><span>Goals Against</span></th>
+              <th class="sortable" data-key="avg_shots_per_game"><span>Avg Shots/Game</span></th>
+              <th class="sortable" data-key="final_save_pct"><span>Save %</span></th>
             </tr>
           </thead>
           <tbody id="summary-table-body"></tbody>
         </table>
-        <p class="empty-state" id="table-empty" hidden>No goalies match the current filters.</p>
-      </section>
-    </div>
+      </div>
+      <p class="empty-state" id="table-empty" hidden>No goalies match the current filters.</p>
+    </section>
+  </div>
 
-    <script>
-      const summaryData = [{"team": "AIK IBF", "goalie": "Andreas Beckius (35 år)", "games_played": 2, "total_shots": 43, "total_saves": 31, "goals_against": 12, "final_save_pct": 0.7209302325581395, "avg_shots_per_game": 21.5, "save_pct_display": "72.1%"}, {"team": "AIK IBF", "goalie": "Jonathan Hjelm (27 år)", "games_played": 9, "total_shots": 250, "total_saves": 194, "goals_against": 56, "final_save_pct": 0.776, "avg_shots_per_game": 27.77777777777778, "save_pct_display": "77.6%"}, {"team": "FBC Kalmarsund", "goalie": "Axel Adebrink (20 år)", "games_played": 11, "total_shots": 1, "total_saves": 1, "goals_against": 0, "final_save_pct": 1.0, "avg_shots_per_game": 0.09090909090909091, "save_pct_display": "100.0%"}, {"team": "FBC Kalmarsund", "goalie": "Pontus Zarins (27 år)", "games_played": 11, "total_shots": 209, "total_saves": 166, "goals_against": 43, "final_save_pct": 0.7942583732057417, "avg_shots_per_game": 19.0, "save_pct_display": "79.4%"}, {"team": "Hovslätts IK", "goalie": "David Andersson (23 år)", "games_played": 7, "total_shots": 33, "total_saves": 13, "goals_against": 20, "final_save_pct": 0.3939393939393939, "avg_shots_per_game": 4.714285714285714, "save_pct_display": "39.4%"}, {"team": "Hovslätts IK", "goalie": "Gustav Ringhagen (22 år)", "games_played": 7, "total_shots": 179, "total_saves": 126, "goals_against": 53, "final_save_pct": 0.7039106145251397, "avg_shots_per_game": 25.571428571428573, "save_pct_display": "70.4%"}, {"team": "Hovslätts IK", "goalie": "Philip Axelsson (24 år)", "games_played": 8, "total_shots": 72, "total_saves": 51, "goals_against": 21, "final_save_pct": 0.7083333333333334, "avg_shots_per_game": 9.0, "save_pct_display": "70.8%"}, {"team": "IBF Falun", "goalie": "Carl Bending-Sörling (31 år)", "games_played": 11, "total_shots": 191, "total_saves": 147, "goals_against": 44, "final_save_pct": 0.7696335078534031, "avg_shots_per_game": 17.363636363636363, "save_pct_display": "77.0%"}, {"team": "IBF Falun", "goalie": "Victor Frejd (25 år)", "games_played": 11, "total_shots": 57, "total_saves": 44, "goals_against": 13, "final_save_pct": 0.7719298245614035, "avg_shots_per_game": 5.181818181818182, "save_pct_display": "77.2%"}, {"team": "Jönköpings IK", "goalie": "Alessio Mura (21 år)", "games_played": 10, "total_shots": 6, "total_saves": 5, "goals_against": 1, "final_save_pct": 0.8333333333333334, "avg_shots_per_game": 0.6, "save_pct_display": "83.3%"}, {"team": "Jönköpings IK", "goalie": "Emil Ödman (23 år)", "games_played": 11, "total_shots": 205, "total_saves": 148, "goals_against": 57, "final_save_pct": 0.7219512195121951, "avg_shots_per_game": 18.636363636363637, "save_pct_display": "72.2%"}, {"team": "Linköping IBK", "goalie": "Tomas Jurco (21 år)", "games_played": 11, "total_shots": 231, "total_saves": 179, "goals_against": 52, "final_save_pct": 0.7748917748917749, "avg_shots_per_game": 21.0, "save_pct_display": "77.5%"}, {"team": "Mullsjö AIS", "goalie": "Gustav Jansson (34 år)", "games_played": 11, "total_shots": 166, "total_saves": 131, "goals_against": 35, "final_save_pct": 0.7891566265060241, "avg_shots_per_game": 15.090909090909092, "save_pct_display": "78.9%"}, {"team": "Mullsjö AIS", "goalie": "Samuel Jönsson Dolke (20 år)", "games_played": 11, "total_shots": 72, "total_saves": 54, "goals_against": 18, "final_save_pct": 0.75, "avg_shots_per_game": 6.545454545454546, "save_pct_display": "75.0%"}, {"team": "Nykvarns IBF", "goalie": "Jesper Ahrén (23 år)", "games_played": 11, "total_shots": 27, "total_saves": 17, "goals_against": 10, "final_save_pct": 0.6296296296296297, "avg_shots_per_game": 2.4545454545454546, "save_pct_display": "63.0%"}, {"team": "Nykvarns IBF", "goalie": "Lucas Orrmo (37 år)", "games_played": 11, "total_shots": 260, "total_saves": 204, "goals_against": 56, "final_save_pct": 0.7846153846153846, "avg_shots_per_game": 23.636363636363637, "save_pct_display": "78.5%"}, {"team": "Pixbo IBK", "goalie": "Jon Hedlund (34 år)", "games_played": 11, "total_shots": 196, "total_saves": 171, "goals_against": 25, "final_save_pct": 0.8724489795918368, "avg_shots_per_game": 17.818181818181817, "save_pct_display": "87.2%"}, {"team": "Pixbo IBK", "goalie": "Liam Juhlin (19 år)", "games_played": 10, "total_shots": 41, "total_saves": 27, "goals_against": 14, "final_save_pct": 0.6585365853658537, "avg_shots_per_game": 4.1, "save_pct_display": "65.9%"}, {"team": "Storvreta IBK", "goalie": "Emil Lindblom (23 år)", "games_played": 11, "total_shots": 10, "total_saves": 5, "goals_against": 5, "final_save_pct": 0.5, "avg_shots_per_game": 0.9090909090909091, "save_pct_display": "50.0%"}, {"team": "Storvreta IBK", "goalie": "Måns Parsjö (31 år)", "games_played": 11, "total_shots": 147, "total_saves": 116, "goals_against": 31, "final_save_pct": 0.7891156462585034, "avg_shots_per_game": 13.363636363636363, "save_pct_display": "78.9%"}, {"team": "Strängnäs IBK", "goalie": "Oskar-Viking Tjärnberg (28 år)", "games_played": 11, "total_shots": 206, "total_saves": 152, "goals_against": 54, "final_save_pct": 0.7378640776699029, "avg_shots_per_game": 18.727272727272727, "save_pct_display": "73.8%"}, {"team": "Strängnäs IBK", "goalie": "Wiktor Åkerstedt (30 år)", "games_played": 10, "total_shots": 94, "total_saves": 76, "goals_against": 18, "final_save_pct": 0.8085106382978723, "avg_shots_per_game": 9.4, "save_pct_display": "80.9%"}, {"team": "Visby IBK", "goalie": "Andreas Egegård (28 år)", "games_played": 11, "total_shots": 17, "total_saves": 9, "goals_against": 8, "final_save_pct": 0.5294117647058824, "avg_shots_per_game": 1.5454545454545454, "save_pct_display": "52.9%"}, {"team": "Visby IBK", "goalie": "Rasmus Ekström (30 år)", "games_played": 11, "total_shots": 262, "total_saves": 208, "goals_against": 54, "final_save_pct": 0.7938931297709924, "avg_shots_per_game": 23.818181818181817, "save_pct_display": "79.4%"}, {"team": "Växjö IBK", "goalie": "Santtu Strandberg (34 år)", "games_played": 11, "total_shots": 197, "total_saves": 148, "goals_against": 49, "final_save_pct": 0.751269035532995, "avg_shots_per_game": 17.90909090909091, "save_pct_display": "75.1%"}, {"team": "Warberg IC", "goalie": "Nicholay Halvorsen (25 år)", "games_played": 11, "total_shots": 30, "total_saves": 24, "goals_against": 6, "final_save_pct": 0.8, "avg_shots_per_game": 2.727272727272727, "save_pct_display": "80.0%"}, {"team": "Warberg IC", "goalie": "Olle Jonsson (25 år)", "games_played": 11, "total_shots": 223, "total_saves": 170, "goals_against": 53, "final_save_pct": 0.7623318385650224, "avg_shots_per_game": 20.272727272727273, "save_pct_display": "76.2%"}];
+  <script type="module">
+    const goalies = [
+      {
+        "team": "AIK IBF",
+        "goalie": "Andreas Beckius (35 år)",
+        "games_played": 2,
+        "total_shots": 43,
+        "total_saves": 31,
+        "goals_against": 12,
+        "final_save_pct": 0.7209302325581395,
+        "avg_shots_per_game": 21.5,
+        "save_pct_display": "72.1%"
+      },
+      {
+        "team": "AIK IBF",
+        "goalie": "Jonathan Hjelm (27 år)",
+        "games_played": 9,
+        "total_shots": 250,
+        "total_saves": 194,
+        "goals_against": 56,
+        "final_save_pct": 0.776,
+        "avg_shots_per_game": 27.77777777777778,
+        "save_pct_display": "77.6%"
+      },
+      {
+        "team": "FBC Kalmarsund",
+        "goalie": "Axel Adebrink (20 år)",
+        "games_played": 11,
+        "total_shots": 1,
+        "total_saves": 1,
+        "goals_against": 0,
+        "final_save_pct": 1,
+        "avg_shots_per_game": 0.09090909090909091,
+        "save_pct_display": "100.0%"
+      },
+      {
+        "team": "FBC Kalmarsund",
+        "goalie": "Pontus Zarins (27 år)",
+        "games_played": 11,
+        "total_shots": 209,
+        "total_saves": 166,
+        "goals_against": 43,
+        "final_save_pct": 0.7942583732057417,
+        "avg_shots_per_game": 19,
+        "save_pct_display": "79.4%"
+      },
+      {
+        "team": "Hovslätts IK",
+        "goalie": "David Andersson (23 år)",
+        "games_played": 7,
+        "total_shots": 33,
+        "total_saves": 13,
+        "goals_against": 20,
+        "final_save_pct": 0.3939393939393939,
+        "avg_shots_per_game": 4.714285714285714,
+        "save_pct_display": "39.4%"
+      },
+      {
+        "team": "Hovslätts IK",
+        "goalie": "Gustav Ringhagen (22 år)",
+        "games_played": 7,
+        "total_shots": 179,
+        "total_saves": 126,
+        "goals_against": 53,
+        "final_save_pct": 0.7039106145251397,
+        "avg_shots_per_game": 25.571428571428573,
+        "save_pct_display": "70.4%"
+      },
+      {
+        "team": "Hovslätts IK",
+        "goalie": "Philip Axelsson (24 år)",
+        "games_played": 8,
+        "total_shots": 72,
+        "total_saves": 51,
+        "goals_against": 21,
+        "final_save_pct": 0.7083333333333334,
+        "avg_shots_per_game": 9,
+        "save_pct_display": "70.8%"
+      },
+      {
+        "team": "IBF Falun",
+        "goalie": "Carl Bending-Sörling (31 år)",
+        "games_played": 11,
+        "total_shots": 191,
+        "total_saves": 147,
+        "goals_against": 44,
+        "final_save_pct": 0.7696335078534031,
+        "avg_shots_per_game": 17.363636363636363,
+        "save_pct_display": "77.0%"
+      },
+      {
+        "team": "IBF Falun",
+        "goalie": "Victor Frejd (25 år)",
+        "games_played": 11,
+        "total_shots": 57,
+        "total_saves": 44,
+        "goals_against": 13,
+        "final_save_pct": 0.7719298245614035,
+        "avg_shots_per_game": 5.181818181818182,
+        "save_pct_display": "77.2%"
+      },
+      {
+        "team": "Jönköpings IK",
+        "goalie": "Alessio Mura (21 år)",
+        "games_played": 10,
+        "total_shots": 6,
+        "total_saves": 5,
+        "goals_against": 1,
+        "final_save_pct": 0.8333333333333334,
+        "avg_shots_per_game": 0.6,
+        "save_pct_display": "83.3%"
+      },
+      {
+        "team": "Jönköpings IK",
+        "goalie": "Emil Ödman (23 år)",
+        "games_played": 11,
+        "total_shots": 220,
+        "total_saves": 160,
+        "goals_against": 60,
+        "final_save_pct": 0.7272727272727273,
+        "avg_shots_per_game": 20,
+        "save_pct_display": "72.7%"
+      },
+      {
+        "team": "Linköping IBK",
+        "goalie": "Anders Eliasson (32 år)",
+        "games_played": 11,
+        "total_shots": 209,
+        "total_saves": 156,
+        "goals_against": 53,
+        "final_save_pct": 0.7464114832535885,
+        "avg_shots_per_game": 19,
+        "save_pct_display": "74.6%"
+      },
+      {
+        "team": "Linköping IBK",
+        "goalie": "Otto Kronman (21 år)",
+        "games_played": 10,
+        "total_shots": 71,
+        "total_saves": 52,
+        "goals_against": 19,
+        "final_save_pct": 0.7323943661971831,
+        "avg_shots_per_game": 7.1,
+        "save_pct_display": "73.2%"
+      },
+      {
+        "team": "Mullsjö AIS",
+        "goalie": "Adam Eklöv (27 år)",
+        "games_played": 5,
+        "total_shots": 57,
+        "total_saves": 38,
+        "goals_against": 19,
+        "final_save_pct": 0.6666666666666666,
+        "avg_shots_per_game": 11.4,
+        "save_pct_display": "66.7%"
+      },
+      {
+        "team": "Mullsjö AIS",
+        "goalie": "Jonas Hjelm (22 år)",
+        "games_played": 11,
+        "total_shots": 200,
+        "total_saves": 156,
+        "goals_against": 44,
+        "final_save_pct": 0.78,
+        "avg_shots_per_game": 18.181818181818183,
+        "save_pct_display": "78.0%"
+      },
+      {
+        "team": "Nykvarns IBF",
+        "goalie": "Eric Wentz (22 år)",
+        "games_played": 11,
+        "total_shots": 150,
+        "total_saves": 115,
+        "goals_against": 35,
+        "final_save_pct": 0.7666666666666667,
+        "avg_shots_per_game": 13.636363636363637,
+        "save_pct_display": "76.7%"
+      },
+      {
+        "team": "Pixbo IBK",
+        "goalie": "Andreas Lindgren (35 år)",
+        "games_played": 10,
+        "total_shots": 29,
+        "total_saves": 23,
+        "goals_against": 6,
+        "final_save_pct": 0.7931034482758621,
+        "avg_shots_per_game": 2.9,
+        "save_pct_display": "79.3%"
+      },
+      {
+        "team": "Pixbo IBK",
+        "goalie": "Jon Hedlund (34 år)",
+        "games_played": 11,
+        "total_shots": 196,
+        "total_saves": 171,
+        "goals_against": 25,
+        "final_save_pct": 0.8724489795918368,
+        "avg_shots_per_game": 17.818181818181817,
+        "save_pct_display": "87.2%"
+      },
+      {
+        "team": "Pixbo IBK",
+        "goalie": "Liam Juhlin (19 år)",
+        "games_played": 10,
+        "total_shots": 41,
+        "total_saves": 27,
+        "goals_against": 14,
+        "final_save_pct": 0.6585365853658537,
+        "avg_shots_per_game": 4.1,
+        "save_pct_display": "65.9%"
+      },
+      {
+        "team": "Storvreta IBK",
+        "goalie": "Emil Lindblom (23 år)",
+        "games_played": 11,
+        "total_shots": 10,
+        "total_saves": 5,
+        "goals_against": 5,
+        "final_save_pct": 0.5,
+        "avg_shots_per_game": 0.9090909090909091,
+        "save_pct_display": "50.0%"
+      },
+      {
+        "team": "Storvreta IBK",
+        "goalie": "Måns Parsjö (31 år)",
+        "games_played": 11,
+        "total_shots": 147,
+        "total_saves": 116,
+        "goals_against": 31,
+        "final_save_pct": 0.7891156462585034,
+        "avg_shots_per_game": 13.363636363636363,
+        "save_pct_display": "78.9%"
+      },
+      {
+        "team": "Strängnäs IBK",
+        "goalie": "Oskar-Viking Tjärnberg (28 år)",
+        "games_played": 11,
+        "total_shots": 206,
+        "total_saves": 152,
+        "goals_against": 54,
+        "final_save_pct": 0.7378640776699029,
+        "avg_shots_per_game": 18.727272727272727,
+        "save_pct_display": "73.8%"
+      },
+      {
+        "team": "Strängnäs IBK",
+        "goalie": "Wiktor Åkerstedt (30 år)",
+        "games_played": 10,
+        "total_shots": 94,
+        "total_saves": 76,
+        "goals_against": 18,
+        "final_save_pct": 0.8085106382978723,
+        "avg_shots_per_game": 9.4,
+        "save_pct_display": "80.9%"
+      },
+      {
+        "team": "Visby IBK",
+        "goalie": "Andreas Egegård (28 år)",
+        "games_played": 11,
+        "total_shots": 17,
+        "total_saves": 9,
+        "goals_against": 8,
+        "final_save_pct": 0.5294117647058824,
+        "avg_shots_per_game": 1.5454545454545454,
+        "save_pct_display": "52.9%"
+      },
+      {
+        "team": "Visby IBK",
+        "goalie": "Rasmus Ekström (30 år)",
+        "games_played": 11,
+        "total_shots": 262,
+        "total_saves": 208,
+        "goals_against": 54,
+        "final_save_pct": 0.7938931297709924,
+        "avg_shots_per_game": 23.818181818181817,
+        "save_pct_display": "79.4%"
+      },
+      {
+        "team": "Växjö IBK",
+        "goalie": "Santtu Strandberg (34 år)",
+        "games_played": 11,
+        "total_shots": 197,
+        "total_saves": 148,
+        "goals_against": 49,
+        "final_save_pct": 0.751269035532995,
+        "avg_shots_per_game": 17.90909090909091,
+        "save_pct_display": "75.1%"
+      },
+      {
+        "team": "Warberg IC",
+        "goalie": "Nicholay Halvorsen (25 år)",
+        "games_played": 11,
+        "total_shots": 30,
+        "total_saves": 24,
+        "goals_against": 6,
+        "final_save_pct": 0.8,
+        "avg_shots_per_game": 2.727272727272727,
+        "save_pct_display": "80.0%"
+      },
+      {
+        "team": "Warberg IC",
+        "goalie": "Olle Jonsson (25 år)",
+        "games_played": 11,
+        "total_shots": 223,
+        "total_saves": 170,
+        "goals_against": 53,
+        "final_save_pct": 0.7623318385650224,
+        "avg_shots_per_game": 20.272727272727273,
+        "save_pct_display": "76.2%"
+      }
+    ];
 
-      function renderTable(rows) {
-        const tbody = document.getElementById('summary-table-body');
-        tbody.innerHTML = '';
-        if (!rows.length) {
-          document.getElementById('table-empty').hidden = false;
-          return;
+    const elements = {
+      tableBody: document.getElementById("summary-table-body"),
+      tableEmpty: document.getElementById("table-empty"),
+      teamFilter: document.getElementById("team-filter"),
+      goalieSearch: document.getElementById("goalie-search"),
+      teamsStat: document.getElementById("teams-stat"),
+      goaliesStat: document.getElementById("goalies-stat"),
+      leaderStat: document.getElementById("leader-stat"),
+      shotsStat: document.getElementById("shots-stat"),
+    };
+
+    const state = {
+      sortKey: "final_save_pct",
+      ascending: false,
+      team: "ALL",
+      search: "",
+    };
+
+    function uniqueTeams() {
+      return Array.from(new Set(goalies.map((g) => g.team)));
+    }
+
+    function formatNumber(num) {
+      return Intl.NumberFormat("en-US").format(Math.round(num));
+    }
+
+    function formatPercent(value) {
+      return `${(value * 100).toFixed(1)}%`;
+    }
+
+    function renderFilters() {
+      const options = ["<option value=\"ALL\">All teams</option>", ...uniqueTeams().map((team) => `<option value="${team}">${team}</option>`)];
+      elements.teamFilter.innerHTML = options.join("");
+    }
+
+    function renderStats(data) {
+      const teams = uniqueTeams();
+      const totalShots = data.reduce((sum, row) => sum + (row.total_shots || 0), 0);
+      const leader = data.filter((row) => row.final_save_pct).sort((a, b) => b.final_save_pct - a.final_save_pct)[0];
+
+      elements.teamsStat.textContent = teams.length;
+      elements.goaliesStat.textContent = data.length;
+      elements.leaderStat.textContent = leader ? `${leader.save_pct_display} (${leader.goalie})` : "–";
+      elements.shotsStat.textContent = formatNumber(totalShots);
+    }
+
+    function renderTable(rows) {
+      elements.tableBody.innerHTML = "";
+      if (!rows.length) {
+        elements.tableEmpty.hidden = false;
+        return;
+      }
+      elements.tableEmpty.hidden = true;
+
+      const fragment = document.createDocumentFragment();
+      rows.forEach((row) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${row.team}</td>
+          <td>${row.goalie}</td>
+          <td>${row.games_played}</td>
+          <td>${row.total_shots}</td>
+          <td>${row.total_saves}</td>
+          <td>${row.goals_against}</td>
+          <td>${row.avg_shots_per_game.toFixed(1)}</td>
+          <td>${row.save_pct_display || formatPercent(row.final_save_pct)}</td>
+        `;
+        fragment.appendChild(tr);
+      });
+      elements.tableBody.appendChild(fragment);
+    }
+
+    function applyFilters(data) {
+      return data.filter((row) => {
+        const matchesTeam = state.team === "ALL" || row.team === state.team;
+        const matchesSearch = !state.search || row.goalie.toLowerCase().includes(state.search);
+        return matchesTeam && matchesSearch;
+      });
+    }
+
+    function sortData(data) {
+      const sorted = [...data].sort((a, b) => {
+        const av = a[state.sortKey];
+        const bv = b[state.sortKey];
+        if (typeof av === "number" && typeof bv === "number") {
+          return state.ascending ? av - bv : bv - av;
         }
-        document.getElementById('table-empty').hidden = true;
-        const fragment = document.createDocumentFragment();
-        rows.forEach((row) => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>${row.team || 'Unknown'}</td>
-            <td>${row.goalie}</td>
-            <td>${row.games_played}</td>
-            <td>${row.total_shots}</td>
-            <td>${row.total_saves}</td>
-            <td>${row.goals_against}</td>
-            <td>${(row.avg_shots_per_game || 0).toFixed(1)}</td>
-            <td>${row.save_pct_display || '–'}</td>`;
-          fragment.appendChild(tr);
-        });
-        tbody.appendChild(fragment);
-      }
+        return state.ascending
+          ? String(av).localeCompare(String(bv))
+          : String(bv).localeCompare(String(av));
+      });
+      return sorted;
+    }
 
-      function currentFilters() {
-        return {
-          team: document.getElementById('team-filter').value,
-          search: document.getElementById('goalie-search').value.trim().toLowerCase(),
-        };
-      }
+    function render() {
+      const filtered = applyFilters(goalies);
+      renderStats(goalies);
+      renderTable(sortData(filtered));
+    }
 
-      function applyFilters(data) {
-        const { team, search } = currentFilters();
-        return data.filter((row) => {
-          const matchesTeam = team === 'ALL' || (row.team || 'Unknown') === team;
-          const matchesSearch = !search || row.goalie.toLowerCase().includes(search);
-          return matchesTeam && matchesSearch;
-        });
-      }
+    function setupInteractions() {
+      elements.teamFilter.addEventListener("change", () => {
+        state.team = elements.teamFilter.value;
+        render();
+      });
 
-      function sortBy(key, ascending) {
-        return (a, b) => {
-          const av = a[key] ?? (typeof a[key] === 'number' ? 0 : '');
-          const bv = b[key] ?? (typeof b[key] === 'number' ? 0 : '');
-          if (typeof av === 'number' && typeof bv === 'number') {
-            return ascending ? av - bv : bv - av;
+      elements.goalieSearch.addEventListener("input", (event) => {
+        state.search = event.target.value.trim().toLowerCase();
+        render();
+      });
+
+      document.getElementById("reset-view").addEventListener("click", () => {
+        state.team = "ALL";
+        state.search = "";
+        state.sortKey = "final_save_pct";
+        state.ascending = false;
+        elements.teamFilter.value = "ALL";
+        elements.goalieSearch.value = "";
+        render();
+      });
+
+      document.querySelectorAll("th.sortable").forEach((th) => {
+        th.addEventListener("click", () => {
+          const key = th.dataset.key;
+          if (state.sortKey === key) {
+            state.ascending = !state.ascending;
+          } else {
+            state.sortKey = key;
+            state.ascending = false;
           }
-          return ascending ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
-        };
-      }
-
-      window.addEventListener('DOMContentLoaded', () => {
-        let sortState = { key: 'team', ascending: true };
-        renderTable(summaryData.sort(sortBy(sortState.key, sortState.ascending)));
-
-        document.getElementById('team-filter').addEventListener('change', () => {
-          const filtered = applyFilters(summaryData).sort(sortBy(sortState.key, sortState.ascending));
-          renderTable(filtered);
-        });
-
-        document.getElementById('goalie-search').addEventListener('input', () => {
-          const filtered = applyFilters(summaryData).sort(sortBy(sortState.key, sortState.ascending));
-          renderTable(filtered);
-        });
-
-        document.getElementById('reset-view').addEventListener('click', () => {
-          sortState = { key: 'team', ascending: true };
-          document.getElementById('team-filter').value = 'ALL';
-          document.getElementById('goalie-search').value = '';
-          renderTable(summaryData.sort(sortBy(sortState.key, sortState.ascending)));
-        });
-
-        document.querySelectorAll('th.sortable').forEach((th) => {
-          th.addEventListener('click', () => {
-            const key = th.dataset.key;
-            if (sortState.key === key) {
-              sortState.ascending = !sortState.ascending;
-            } else {
-              sortState = { key, ascending: true };
-            }
-            const filtered = applyFilters(summaryData).sort(sortBy(sortState.key, sortState.ascending));
-            renderTable(filtered);
-          });
+          render();
         });
       });
-    </script>
-  </body>
+    }
+
+    renderFilters();
+    setupInteractions();
+    render();
+  </script>
+</body>
 </html>
