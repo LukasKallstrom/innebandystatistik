@@ -600,9 +600,52 @@ def parse_goalies_from_player_table(
         )
 
 
+def _extract_date_text(doc: BeautifulSoup) -> Optional[str]:
+    """Return the best-effort date/time string for a game page.
+
+    Some match pages (e.g. statistik.innebandy.se) expose the date inside the
+    "Matchinformation" table rather than a dedicated span. A few also embed an
+    alternative kickoff time inside an HTML comment near the top of the page.
+    Prefer the visible table value, then fall back to a generic ISO-like date
+    pattern anywhere on the page.
+    """
+
+    date_text = first_text(doc, DATE_SELECTORS)
+    if date_text:
+        return date_text
+
+    # Fallback: inspect the Matchinformation table manually to avoid brittle
+    # CSS selectors when soup-sieve support differs across environments.
+    match_info = doc.select_one("#iMatchInfo")
+    if match_info:
+        # look for a row whose first cell mentions time/date
+        for row in match_info.find_all("tr"):
+            cells = row.find_all("td")
+            if len(cells) < 2:
+                continue
+            heading = cells[0].get_text(" ", strip=True).lower()
+            if any(key in heading for key in ("tid", "date", "spelades")):
+                raw = cells[1].get_text(" ", strip=True)
+                if raw:
+                    return raw
+        # otherwise try a regex inside the table text (avoids picking the
+        # commented-out matchtime at the top of the document)
+        table_text = match_info.get_text(" ", strip=True)
+        match = re.search(r"\d{4}-\d{2}-\d{2}(?:\s+\d{2}:\d{2})?", table_text)
+        if match:
+            return match.group(0)
+
+    # Last resort: grab the first ISO-like date anywhere in the page
+    page_text = doc.get_text(" ", strip=True)
+    match = re.search(r"\d{4}-\d{2}-\d{2}(?:\s+\d{2}:\d{2})?", page_text)
+    if match:
+        return match.group(0)
+    return None
+
+
 def parse_game(doc: BeautifulSoup, url: str) -> tuple[Game, List[Appearance]]:
     game_id = parse_game_id(url)
-    date_text = first_text(doc, DATE_SELECTORS)
+    date_text = _extract_date_text(doc)
     home = first_text(doc, TEAM_SELECTORS)
     away = first_text(doc, AWAY_SELECTORS)
     game = Game(

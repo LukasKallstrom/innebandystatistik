@@ -167,3 +167,30 @@ def test_percent_with_spaces_and_nbsp_is_parsed():
     assert a.saves == 9
     # 90 % -> 0.9
     assert abs(a.save_pct - 0.9) < 1e-9
+
+
+def test_matchinformation_date_beats_comment_block():
+    """Date in Matchinformation should be used instead of commented metadata."""
+
+    html = """
+    <html><body>
+      <!-- hidden metadata with different kickoff time -->
+      <!-- <matchtid>2025-09-20 02:00</matchtid> -->
+
+      <div class="clMatchView">
+        <table class="clCommonGrid" id="iMatchInfo" cellspacing="0">
+          <tbody>
+            <tr><td>Matchnummer</td><td>123</td></tr>
+            <tr><td>Tävling</td><td>SSL</td></tr>
+            <tr><td>Tid</td><td><span>2025-09-20<!-- br ok --> 14:00</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </body></html>
+    """
+
+    doc = _soup(html)
+    game, _ = parse_game(doc, url="http://example.test/game?fmid=ID")
+
+    assert isinstance(game.date, datetime)
+    assert game.date == datetime(2025, 9, 20, 14, 0)
