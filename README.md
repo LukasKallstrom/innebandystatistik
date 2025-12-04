@@ -4,6 +4,9 @@ This project downloads floorball goalie statistics from `statistik.innebandy.se`
 normalises the results, and produces both Excel/PNG exports and an interactive
 Plotly dashboard. The scraping (network + parsing) logic lives in
 `fetch_data.py`, while the presentation logic lives in `display_data.py`.
+The HTML shell for the interactive dashboard is stored in
+`dashboard_template.html`; `display_data.py` injects the scraped data into that
+template to produce the final `index.html` page.
 
 ## Requirements
 - Python 3.10+
