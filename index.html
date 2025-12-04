@@ -1,722 +1,453 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Goalie Save Percentage Dashboard</title>
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap">
-  <style>
-    :root {
-      font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      color: #0f172a;
-      background-color: #f8fafc;
-    }
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Goalie Save Percentage Dashboard</title>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" />
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #0f172a;
+        --bg-panel: rgba(15, 23, 42, 0.75);
+        --bg-light: #f8fafc;
+        --border: rgba(148, 163, 184, 0.35);
+        --text: #0f172a;
+        --text-muted: #475569;
+        --accent: #2563eb;
+        font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
 
-    body {
-      margin: 0;
-      min-height: 100vh;
-      background: radial-gradient(circle at 10% 20%, #dceafe 0, #e2e8f0 35%, #e2e8f0 100%);
-      color: #0f172a;
-    }
+      body {
+        margin: 0;
+        padding: 0;
+        background: linear-gradient(160deg, #020617, #0f172a 55%, #1e293b);
+        color: white;
+        min-height: 100vh;
+      }
 
-    header {
-      display: flex;
-      gap: 1rem;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-    }
+      .page {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 2.5rem 1.5rem 4rem;
+        display: flex;
+        flex-direction: column;
+        gap: 2.5rem;
+      }
 
-    .page {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 2.5rem 1.25rem 3rem;
-      display: flex;
-      flex-direction: column;
-      gap: 2rem;
-    }
+      header {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+      }
 
-    .hero {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 1rem;
-    }
+      h1 {
+        margin: 0;
+        font-size: clamp(1.8rem, 4vw, 2.4rem);
+        letter-spacing: -0.02em;
+      }
 
-    .hero h1 {
-      margin: 0;
-      font-size: clamp(2rem, 4vw, 2.75rem);
-      letter-spacing: -0.02em;
-    }
+      p.description {
+        margin: 0;
+        color: rgba(255, 255, 255, 0.75);
+        max-width: 820px;
+        line-height: 1.6;
+      }
 
-    .hero p {
-      margin: 0;
-      color: #475569;
-      max-width: 60ch;
-      line-height: 1.5;
-    }
+      .panel {
+        background: var(--bg-panel);
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        border-radius: 16px;
+        padding: 1.5rem;
+        box-shadow: 0 25px 70px rgba(0, 0, 0, 0.28);
+        backdrop-filter: blur(10px);
+      }
 
-    .pill {
-      background: #2563eb1a;
-      color: #1d4ed8;
-      border: 1px solid #bfdbfe;
-      padding: 0.35rem 0.75rem;
-      border-radius: 999px;
-      font-weight: 600;
-      font-size: 0.9rem;
-    }
+      .controls {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        align-items: flex-end;
+      }
 
-    .panel {
-      background: #ffffff;
-      border: 1px solid #e2e8f0;
-      border-radius: 18px;
-      padding: 1.25rem 1.5rem;
-      box-shadow: 0 25px 65px rgba(15, 23, 42, 0.12);
-    }
+      label {
+        display: block;
+        margin-bottom: 0.35rem;
+        color: rgba(255, 255, 255, 0.8);
+        font-weight: 600;
+        letter-spacing: 0.01em;
+      }
 
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 1rem;
-    }
+      select, input {
+        width: 100%;
+        padding: 0.65rem 0.85rem;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        background: rgba(255, 255, 255, 0.06);
+        color: white;
+        font-size: 0.95rem;
+        transition: border-color 0.2s ease, background 0.2s ease;
+      }
 
-    .stat-card {
-      padding: 1.25rem 1rem;
-      border-radius: 14px;
-      border: 1px solid #e2e8f0;
-      background: linear-gradient(160deg, #fff, #f8fafc);
-      display: grid;
-      gap: 0.35rem;
-    }
+      select:focus, input:focus {
+        outline: none;
+        border-color: rgba(37, 99, 235, 0.8);
+        background: rgba(255, 255, 255, 0.1);
+      }
 
-    .stat-card h2 {
-      margin: 0;
-      font-size: 0.9rem;
-      color: #475569;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
+      button {
+        background: linear-gradient(120deg, #2563eb, #4f46e5);
+        color: white;
+        border: none;
+        padding: 0.7rem 1.2rem;
+        border-radius: 12px;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+        cursor: pointer;
+        transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.2s ease;
+        box-shadow: 0 12px 35px rgba(37, 99, 235, 0.25);
+      }
 
-    .stat-card strong {
-      font-size: 1.9rem;
-      letter-spacing: -0.02em;
-    }
+      button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 16px 40px rgba(37, 99, 235, 0.32);
+      }
 
-    .controls {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 1rem;
-      align-items: end;
-    }
+      button:active {
+        transform: translateY(0);
+        opacity: 0.9;
+      }
 
-    label {
-      font-size: 0.95rem;
-      display: grid;
-      gap: 0.5rem;
-      color: #0f172a;
-      font-weight: 600;
-    }
+      #savepct-chart {
+        width: 100%;
+        height: 580px;
+      }
 
-    select,
-    input[type="search"] {
-      border-radius: 12px;
-      border: 1px solid #cbd5e1;
-      padding: 0.65rem 0.75rem;
-      font-size: 1rem;
-      background: #fff;
-    }
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 0.85rem;
+        margin-top: 1rem;
+      }
 
-    button {
-      border: none;
-      border-radius: 12px;
-      padding: 0.75rem 1rem;
-      font-size: 1rem;
-      font-weight: 700;
-      background: linear-gradient(120deg, #2563eb, #7c3aed);
-      color: #fff;
-      cursor: pointer;
-      box-shadow: 0 12px 35px rgba(37, 99, 235, 0.35);
-      transition: transform 0.1s ease;
-    }
+      .stat-card {
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        border-radius: 12px;
+        padding: 0.9rem 1rem;
+      }
 
-    button:hover {
-      transform: translateY(-1px);
-    }
+      .stat-label {
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 0.85rem;
+      }
 
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 1rem;
-      font-size: 0.98rem;
-    }
+      .stat-value {
+        font-size: 1.4rem;
+        font-weight: 700;
+      }
 
-    thead {
-      background: #f8fafc;
-      position: sticky;
-      top: 0;
-    }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 1rem;
+      }
 
-    th,
-    td {
-      padding: 0.75rem 0.5rem;
-      text-align: left;
-      border-bottom: 1px solid #e2e8f0;
-    }
+      th, td {
+        padding: 0.75rem 0.8rem;
+        text-align: left;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+      }
 
-    th.sortable {
-      cursor: pointer;
-      user-select: none;
-    }
+      th {
+        color: rgba(255, 255, 255, 0.8);
+        font-weight: 700;
+        cursor: pointer;
+        white-space: nowrap;
+      }
 
-    th.sortable span {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.35rem;
-      color: #475569;
-      font-size: 0.9rem;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-    }
+      td {
+        color: rgba(255, 255, 255, 0.85);
+      }
 
-    th.sortable svg {
-      width: 0.9rem;
-      height: 0.9rem;
-      opacity: 0.65;
-    }
+      tr:hover td {
+        background: rgba(255, 255, 255, 0.03);
+      }
 
-    tbody tr:hover {
-      background: #f8fafc;
-    }
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        padding: 0.2rem 0.6rem;
+        border-radius: 999px;
+        font-size: 0.85rem;
+      }
 
-    .empty-state {
-      margin: 1.25rem 0 0;
-      color: #475569;
-    }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.25rem 0.55rem;
+        border-radius: 999px;
+        background: rgba(37, 99, 235, 0.2);
+        color: white;
+        border: 1px solid rgba(37, 99, 235, 0.45);
+        font-size: 0.85rem;
+      }
 
-    .table-wrapper {
-      overflow: auto;
-    }
-  </style>
-</head>
-<body>
-  <div class="page">
-    <header class="hero">
-      <div>
-        <p class="pill">Floorball goalie tracker</p>
-        <h1>Save percentage dashboard</h1>
-        <p>Filter by team, search for a specific goalie, and sort any column. All numbers come from the Python scraper that ships with this project.</p>
+      .muted {
+        color: rgba(255, 255, 255, 0.65);
+      }
+
+      .dropped-list {
+        margin-top: 0.4rem;
+        color: rgba(255, 255, 255, 0.75);
+        line-height: 1.6;
+      }
+
+      footer {
+        color: rgba(255, 255, 255, 0.55);
+        font-size: 0.9rem;
+        text-align: center;
+        padding-bottom: 2rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header>
+        <h1>Goalie Save Percentage Dashboard</h1>
+        <p class="description">Interactive view of goalie cumulative save percentage across leagues. Use the dropdowns below to switch leagues, filter by team, and search goalies.</p>
+      </header>
+
+      <div class="panel">
+        <div class="controls">
+          <div>
+            <label for="league-selector">League</label>
+            <select id="league-selector"></select>
+          </div>
+          <div>
+            <label for="team-filter">Team filter</label>
+            <select id="team-filter">
+              <option value="ALL">All teams</option>
+              <option value="AIK IBF">AIK IBF</option><option value="FBC Kalmarsund">FBC Kalmarsund</option><option value="Hovslätts IK">Hovslätts IK</option><option value="IBF Falun">IBF Falun</option><option value="Jönköpings IK">Jönköpings IK</option><option value="Linköping IBK">Linköping IBK</option><option value="Mullsjö AIS">Mullsjö AIS</option><option value="Nykvarns IBF">Nykvarns IBF</option><option value="Pixbo IBK">Pixbo IBK</option><option value="Storvreta IBK">Storvreta IBK</option><option value="Strängnäs IBK">Strängnäs IBK</option><option value="Visby IBK">Visby IBK</option><option value="Växjö IBK">Växjö IBK</option><option value="Warberg IC">Warberg IC</option>
+            </select>
+          </div>
+          <div>
+            <label for="goalie-search">Search goalie</label>
+            <input id="goalie-search" type="search" placeholder="Type a goalie name..." />
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button id="reset-view">Reset view</button>
+          </div>
+        </div>
+
+        <div id="savepct-chart"></div>
+
+        <div class="stats-grid" id="league-stats"></div>
       </div>
-    </header>
 
-    <section class="stats-grid" aria-label="Summary statistics">
-      <article class="stat-card">
-        <h2>Teams tracked</h2>
-        <strong id="teams-stat">–</strong>
-        <span class="muted">Unique clubs represented in the dataset.</span>
-      </article>
-      <article class="stat-card">
-        <h2>Goalies tracked</h2>
-        <strong id="goalies-stat">–</strong>
-        <span class="muted">Total keeper entries across the season.</span>
-      </article>
-      <article class="stat-card">
-        <h2>Top save%</h2>
-        <strong id="leader-stat">–</strong>
-        <span class="muted">Best cumulative save percentage.</span>
-      </article>
-      <article class="stat-card">
-        <h2>Shots faced</h2>
-        <strong id="shots-stat">–</strong>
-        <span class="muted">Combined shots faced by all goalies.</span>
-      </article>
-    </section>
-
-    <section class="panel" aria-label="Filters">
-      <div class="controls">
-        <label>
-          Team
-          <select id="team-filter"></select>
-        </label>
-        <label>
-          Highlight goalie
-          <input id="goalie-search" type="search" placeholder="Search goalie name…" autocomplete="off">
-        </label>
-        <button id="reset-view" type="button">Reset filters</button>
-      </div>
-    </section>
-
-    <section class="panel" aria-label="Goalie table">
-      <div class="table-wrapper">
+      <div class="panel">
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;">
+          <h2 style="margin: 0;">Goalie summary</h2>
+          <div class="tag" id="active-league-name"></div>
+        </div>
         <table>
           <thead>
             <tr>
-              <th class="sortable" data-key="team"><span>Team</span></th>
-              <th class="sortable" data-key="goalie"><span>Goalie</span></th>
-              <th class="sortable" data-key="games_played"><span>Games</span></th>
-              <th class="sortable" data-key="total_shots"><span>Shots</span></th>
-              <th class="sortable" data-key="total_saves"><span>Saves</span></th>
-              <th class="sortable" data-key="goals_against"><span>Goals Against</span></th>
-              <th class="sortable" data-key="avg_shots_per_game"><span>Avg Shots/Game</span></th>
-              <th class="sortable" data-key="final_save_pct"><span>Save %</span></th>
+              <th data-key="goalie" class="sortable">Goalie</th>
+              <th data-key="team" class="sortable">Team</th>
+              <th data-key="games_played" class="sortable">Games</th>
+              <th data-key="total_shots" class="sortable">Shots</th>
+              <th data-key="goals_against" class="sortable">GA</th>
+              <th data-key="avg_shots_per_game" class="sortable">Avg shots</th>
+              <th data-key="final_save_pct" class="sortable">Save %</th>
             </tr>
           </thead>
-          <tbody id="summary-table-body"></tbody>
+          <tbody id="summary-body"></tbody>
         </table>
+        <div class="dropped-list" id="dropped-goalies"></div>
       </div>
-      <p class="empty-state" id="table-empty" hidden>No goalies match the current filters.</p>
-    </section>
-  </div>
 
-  <script type="module">
-    const goalies = [
-      {
-        "team": "AIK IBF",
-        "goalie": "Andreas Beckius (35 år)",
-        "games_played": 2,
-        "total_shots": 43,
-        "total_saves": 31,
-        "goals_against": 12,
-        "final_save_pct": 0.7209302325581395,
-        "avg_shots_per_game": 21.5,
-        "save_pct_display": "72.1%"
-      },
-      {
-        "team": "AIK IBF",
-        "goalie": "Jonathan Hjelm (27 år)",
-        "games_played": 9,
-        "total_shots": 250,
-        "total_saves": 194,
-        "goals_against": 56,
-        "final_save_pct": 0.776,
-        "avg_shots_per_game": 27.77777777777778,
-        "save_pct_display": "77.6%"
-      },
-      {
-        "team": "FBC Kalmarsund",
-        "goalie": "Axel Adebrink (20 år)",
-        "games_played": 11,
-        "total_shots": 1,
-        "total_saves": 1,
-        "goals_against": 0,
-        "final_save_pct": 1,
-        "avg_shots_per_game": 0.09090909090909091,
-        "save_pct_display": "100.0%"
-      },
-      {
-        "team": "FBC Kalmarsund",
-        "goalie": "Pontus Zarins (27 år)",
-        "games_played": 11,
-        "total_shots": 209,
-        "total_saves": 166,
-        "goals_against": 43,
-        "final_save_pct": 0.7942583732057417,
-        "avg_shots_per_game": 19,
-        "save_pct_display": "79.4%"
-      },
-      {
-        "team": "Hovslätts IK",
-        "goalie": "David Andersson (23 år)",
-        "games_played": 7,
-        "total_shots": 33,
-        "total_saves": 13,
-        "goals_against": 20,
-        "final_save_pct": 0.3939393939393939,
-        "avg_shots_per_game": 4.714285714285714,
-        "save_pct_display": "39.4%"
-      },
-      {
-        "team": "Hovslätts IK",
-        "goalie": "Gustav Ringhagen (22 år)",
-        "games_played": 7,
-        "total_shots": 179,
-        "total_saves": 126,
-        "goals_against": 53,
-        "final_save_pct": 0.7039106145251397,
-        "avg_shots_per_game": 25.571428571428573,
-        "save_pct_display": "70.4%"
-      },
-      {
-        "team": "Hovslätts IK",
-        "goalie": "Philip Axelsson (24 år)",
-        "games_played": 8,
-        "total_shots": 72,
-        "total_saves": 51,
-        "goals_against": 21,
-        "final_save_pct": 0.7083333333333334,
-        "avg_shots_per_game": 9,
-        "save_pct_display": "70.8%"
-      },
-      {
-        "team": "IBF Falun",
-        "goalie": "Carl Bending-Sörling (31 år)",
-        "games_played": 11,
-        "total_shots": 191,
-        "total_saves": 147,
-        "goals_against": 44,
-        "final_save_pct": 0.7696335078534031,
-        "avg_shots_per_game": 17.363636363636363,
-        "save_pct_display": "77.0%"
-      },
-      {
-        "team": "IBF Falun",
-        "goalie": "Victor Frejd (25 år)",
-        "games_played": 11,
-        "total_shots": 57,
-        "total_saves": 44,
-        "goals_against": 13,
-        "final_save_pct": 0.7719298245614035,
-        "avg_shots_per_game": 5.181818181818182,
-        "save_pct_display": "77.2%"
-      },
-      {
-        "team": "Jönköpings IK",
-        "goalie": "Alessio Mura (21 år)",
-        "games_played": 10,
-        "total_shots": 6,
-        "total_saves": 5,
-        "goals_against": 1,
-        "final_save_pct": 0.8333333333333334,
-        "avg_shots_per_game": 0.6,
-        "save_pct_display": "83.3%"
-      },
-      {
-        "team": "Jönköpings IK",
-        "goalie": "Emil Ödman (23 år)",
-        "games_played": 11,
-        "total_shots": 220,
-        "total_saves": 160,
-        "goals_against": 60,
-        "final_save_pct": 0.7272727272727273,
-        "avg_shots_per_game": 20,
-        "save_pct_display": "72.7%"
-      },
-      {
-        "team": "Linköping IBK",
-        "goalie": "Anders Eliasson (32 år)",
-        "games_played": 11,
-        "total_shots": 209,
-        "total_saves": 156,
-        "goals_against": 53,
-        "final_save_pct": 0.7464114832535885,
-        "avg_shots_per_game": 19,
-        "save_pct_display": "74.6%"
-      },
-      {
-        "team": "Linköping IBK",
-        "goalie": "Otto Kronman (21 år)",
-        "games_played": 10,
-        "total_shots": 71,
-        "total_saves": 52,
-        "goals_against": 19,
-        "final_save_pct": 0.7323943661971831,
-        "avg_shots_per_game": 7.1,
-        "save_pct_display": "73.2%"
-      },
-      {
-        "team": "Mullsjö AIS",
-        "goalie": "Adam Eklöv (27 år)",
-        "games_played": 5,
-        "total_shots": 57,
-        "total_saves": 38,
-        "goals_against": 19,
-        "final_save_pct": 0.6666666666666666,
-        "avg_shots_per_game": 11.4,
-        "save_pct_display": "66.7%"
-      },
-      {
-        "team": "Mullsjö AIS",
-        "goalie": "Jonas Hjelm (22 år)",
-        "games_played": 11,
-        "total_shots": 200,
-        "total_saves": 156,
-        "goals_against": 44,
-        "final_save_pct": 0.78,
-        "avg_shots_per_game": 18.181818181818183,
-        "save_pct_display": "78.0%"
-      },
-      {
-        "team": "Nykvarns IBF",
-        "goalie": "Eric Wentz (22 år)",
-        "games_played": 11,
-        "total_shots": 150,
-        "total_saves": 115,
-        "goals_against": 35,
-        "final_save_pct": 0.7666666666666667,
-        "avg_shots_per_game": 13.636363636363637,
-        "save_pct_display": "76.7%"
-      },
-      {
-        "team": "Pixbo IBK",
-        "goalie": "Andreas Lindgren (35 år)",
-        "games_played": 10,
-        "total_shots": 29,
-        "total_saves": 23,
-        "goals_against": 6,
-        "final_save_pct": 0.7931034482758621,
-        "avg_shots_per_game": 2.9,
-        "save_pct_display": "79.3%"
-      },
-      {
-        "team": "Pixbo IBK",
-        "goalie": "Jon Hedlund (34 år)",
-        "games_played": 11,
-        "total_shots": 196,
-        "total_saves": 171,
-        "goals_against": 25,
-        "final_save_pct": 0.8724489795918368,
-        "avg_shots_per_game": 17.818181818181817,
-        "save_pct_display": "87.2%"
-      },
-      {
-        "team": "Pixbo IBK",
-        "goalie": "Liam Juhlin (19 år)",
-        "games_played": 10,
-        "total_shots": 41,
-        "total_saves": 27,
-        "goals_against": 14,
-        "final_save_pct": 0.6585365853658537,
-        "avg_shots_per_game": 4.1,
-        "save_pct_display": "65.9%"
-      },
-      {
-        "team": "Storvreta IBK",
-        "goalie": "Emil Lindblom (23 år)",
-        "games_played": 11,
-        "total_shots": 10,
-        "total_saves": 5,
-        "goals_against": 5,
-        "final_save_pct": 0.5,
-        "avg_shots_per_game": 0.9090909090909091,
-        "save_pct_display": "50.0%"
-      },
-      {
-        "team": "Storvreta IBK",
-        "goalie": "Måns Parsjö (31 år)",
-        "games_played": 11,
-        "total_shots": 147,
-        "total_saves": 116,
-        "goals_against": 31,
-        "final_save_pct": 0.7891156462585034,
-        "avg_shots_per_game": 13.363636363636363,
-        "save_pct_display": "78.9%"
-      },
-      {
-        "team": "Strängnäs IBK",
-        "goalie": "Oskar-Viking Tjärnberg (28 år)",
-        "games_played": 11,
-        "total_shots": 206,
-        "total_saves": 152,
-        "goals_against": 54,
-        "final_save_pct": 0.7378640776699029,
-        "avg_shots_per_game": 18.727272727272727,
-        "save_pct_display": "73.8%"
-      },
-      {
-        "team": "Strängnäs IBK",
-        "goalie": "Wiktor Åkerstedt (30 år)",
-        "games_played": 10,
-        "total_shots": 94,
-        "total_saves": 76,
-        "goals_against": 18,
-        "final_save_pct": 0.8085106382978723,
-        "avg_shots_per_game": 9.4,
-        "save_pct_display": "80.9%"
-      },
-      {
-        "team": "Visby IBK",
-        "goalie": "Andreas Egegård (28 år)",
-        "games_played": 11,
-        "total_shots": 17,
-        "total_saves": 9,
-        "goals_against": 8,
-        "final_save_pct": 0.5294117647058824,
-        "avg_shots_per_game": 1.5454545454545454,
-        "save_pct_display": "52.9%"
-      },
-      {
-        "team": "Visby IBK",
-        "goalie": "Rasmus Ekström (30 år)",
-        "games_played": 11,
-        "total_shots": 262,
-        "total_saves": 208,
-        "goals_against": 54,
-        "final_save_pct": 0.7938931297709924,
-        "avg_shots_per_game": 23.818181818181817,
-        "save_pct_display": "79.4%"
-      },
-      {
-        "team": "Växjö IBK",
-        "goalie": "Santtu Strandberg (34 år)",
-        "games_played": 11,
-        "total_shots": 197,
-        "total_saves": 148,
-        "goals_against": 49,
-        "final_save_pct": 0.751269035532995,
-        "avg_shots_per_game": 17.90909090909091,
-        "save_pct_display": "75.1%"
-      },
-      {
-        "team": "Warberg IC",
-        "goalie": "Nicholay Halvorsen (25 år)",
-        "games_played": 11,
-        "total_shots": 30,
-        "total_saves": 24,
-        "goals_against": 6,
-        "final_save_pct": 0.8,
-        "avg_shots_per_game": 2.727272727272727,
-        "save_pct_display": "80.0%"
-      },
-      {
-        "team": "Warberg IC",
-        "goalie": "Olle Jonsson (25 år)",
-        "games_played": 11,
-        "total_shots": 223,
-        "total_saves": 170,
-        "goals_against": 53,
-        "final_save_pct": 0.7623318385650224,
-        "avg_shots_per_game": 20.272727272727273,
-        "save_pct_display": "76.2%"
+      <footer>
+        Built with <span aria-hidden="true">🏑</span> using statistik.innebandy.se data. Cumulative save percentage is calculated from saves/shots over time; goalies with zero shots are excluded from the chart but listed above.
+      </footer>
+    </div>
+
+      <script>
+        const leagues = [{"key": "primary-league", "name": "SSL", "figure": {"data": [{"customdata": [["Linköping IBK", "1571763", 11, 14], ["Linköping IBK", "1571776", 26, 35], ["Linköping IBK", "1571782", 39, 55], ["Linköping IBK", "1571789", 49, 69], ["Linköping IBK", "1571793", 69, 94], ["Linköping IBK", "1571798", 84, 113], ["Linköping IBK", "1571809", 110, 144], ["Linköping IBK", "1571817", 122, 163], ["Linköping IBK", "1571823", 142, 189], ["Linköping IBK", "1571827", 167, 217], ["Linköping IBK", "1571835", 179, 231]], "hovertemplate": "Goalie=Tomas Jurco (21 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Tomas Jurco (21 år)", "line": {"color": "#636efa", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Tomas Jurco (21 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-01T00:00:00", "2000-01-14T00:00:00", "2000-01-20T00:00:00", "2000-01-27T00:00:00", "2000-01-31T00:00:00", "2000-02-05T00:00:00", "2000-02-16T00:00:00", "2000-02-24T00:00:00", "2000-03-01T00:00:00", "2000-03-05T00:00:00", "2000-03-13T00:00:00"], "xaxis": "x", "y": [0.7857142857142857, 0.7428571428571429, 0.7090909090909091, 0.7101449275362319, 0.7340425531914894, 0.7433628318584071, 0.7638888888888888, 0.7484662576687117, 0.7513227513227513, 0.7695852534562212, 0.7748917748917749], "yaxis": "y", "type": "scatter"}, {"customdata": [["Jönköpings IK", "1571763", 18, 22], ["Jönköpings IK", "1571770", 31, 40], ["Jönköpings IK", "1571778", 42, 55], ["Jönköpings IK", "1571786", 55, 73], ["Jönköpings IK", "1571791", 65, 86], ["Jönköpings IK", "1571801", 78, 108], ["Jönköpings IK", "1571806", 92, 126], ["Jönköpings IK", "1571818", 107, 148], ["Jönköpings IK", "1571819", 111, 156], ["Jönköpings IK", "1571826", 130, 178], ["Jönköpings IK", "1571833", 148, 205]], "hovertemplate": "Goalie=Emil Ödman (23 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Emil Ödman (23 år)", "line": {"color": "#EF553B", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Emil Ödman (23 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-01T00:00:00", "2000-01-08T00:00:00", "2000-01-16T00:00:00", "2000-01-24T00:00:00", "2000-01-29T00:00:00", "2000-02-08T00:00:00", "2000-02-13T00:00:00", "2000-02-25T00:00:00", "2000-02-26T00:00:00", "2000-03-04T00:00:00", "2000-03-11T00:00:00"], "xaxis": "x", "y": [0.8181818181818182, 0.775, 0.7636363636363637, 0.7534246575342466, 0.7558139534883721, 0.7222222222222222, 0.7301587301587301, 0.722972972972973, 0.7115384615384616, 0.7303370786516854, 0.7219512195121951], "yaxis": "y", "type": "scatter"}, {"customdata": [["Jönköpings IK", "1571763", 0, 0], ["Jönköpings IK", "1571770", 0, 0], ["Jönköpings IK", "1571778", 0, 0], ["Jönköpings IK", "1571786", 0, 0], ["Jönköpings IK", "1571791", 0, 0], ["Jönköpings IK", "1571801", 0, 0], ["Jönköpings IK", "1571806", 0, 0], ["Jönköpings IK", "1571818", 0, 0], ["Jönköpings IK", "1571819", 5, 6], ["Jönköpings IK", "1571833", 5, 6]], "hovertemplate": "Goalie=Alessio Mura (21 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Alessio Mura (21 år)", "line": {"color": "#00cc96", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Alessio Mura (21 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-01T00:00:00", "2000-01-08T00:00:00", "2000-01-16T00:00:00", "2000-01-24T00:00:00", "2000-01-29T00:00:00", "2000-02-08T00:00:00", "2000-02-13T00:00:00", "2000-02-25T00:00:00", "2000-02-26T00:00:00", "2000-03-11T00:00:00"], "xaxis": "x", "y": [null, null, null, null, null, null, null, null, 0.8333333333333334, 0.8333333333333334], "yaxis": "y", "type": "scatter"}, {"customdata": [["Strängnäs IBK", "1571764", 0, 0], ["Strängnäs IBK", "1571773", 0, 0], ["Strängnäs IBK", "1571777", 0, 0], ["Strängnäs IBK", "1571791", 0, 0], ["Strängnäs IBK", "1571799", 0, 0], ["Strängnäs IBK", "1571811", 0, 0], ["Strängnäs IBK", "1571812", 22, 30], ["Strängnäs IBK", "1571821", 22, 30], ["Strängnäs IBK", "1571830", 45, 58], ["Strängnäs IBK", "1571834", 76, 94]], "hovertemplate": "Goalie=Wiktor Åkerstedt (30 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Wiktor Åkerstedt (30 år)", "line": {"color": "#ab63fa", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Wiktor Åkerstedt (30 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-02T00:00:00", "2000-01-11T00:00:00", "2000-01-15T00:00:00", "2000-01-29T00:00:00", "2000-02-06T00:00:00", "2000-02-18T00:00:00", "2000-02-19T00:00:00", "2000-02-28T00:00:00", "2000-03-08T00:00:00", "2000-03-12T00:00:00"], "xaxis": "x", "y": [null, null, null, null, null, null, 0.7333333333333333, 0.7333333333333333, 0.7758620689655172, 0.8085106382978723], "yaxis": "y", "type": "scatter"}, {"customdata": [["Strängnäs IBK", "1571764", 17, 24], ["Strängnäs IBK", "1571773", 41, 54], ["Strängnäs IBK", "1571777", 63, 81], ["Strängnäs IBK", "1571789", 79, 105], ["Strängnäs IBK", "1571791", 98, 133], ["Strängnäs IBK", "1571799", 117, 158], ["Strängnäs IBK", "1571811", 141, 189], ["Strängnäs IBK", "1571812", 141, 189], ["Strängnäs IBK", "1571821", 152, 206], ["Strängnäs IBK", "1571830", 152, 206], ["Strängnäs IBK", "1571834", 152, 206]], "hovertemplate": "Goalie=Oskar-Viking Tjärnberg (28 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Oskar-Viking Tjärnberg (28 år)", "line": {"color": "#FFA15A", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Oskar-Viking Tjärnberg (28 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-02T00:00:00", "2000-01-11T00:00:00", "2000-01-15T00:00:00", "2000-01-27T00:00:00", "2000-01-29T00:00:00", "2000-02-06T00:00:00", "2000-02-18T00:00:00", "2000-02-19T00:00:00", "2000-02-28T00:00:00", "2000-03-08T00:00:00", "2000-03-12T00:00:00"], "xaxis": "x", "y": [0.7083333333333334, 0.7592592592592593, 0.7777777777777778, 0.7523809523809524, 0.7368421052631579, 0.740506329113924, 0.746031746031746, 0.746031746031746, 0.7378640776699029, 0.7378640776699029, 0.7378640776699029], "yaxis": "y", "type": "scatter"}, {"customdata": [["Storvreta IBK", "1571764", 0, 0], ["Storvreta IBK", "1571771", 0, 0], ["Storvreta IBK", "1571783", 0, 0], ["Storvreta IBK", "1571788", 5, 10], ["Storvreta IBK", "1571792", 5, 10], ["Storvreta IBK", "1571804", 5, 10], ["Storvreta IBK", "1571807", 5, 10], ["Storvreta IBK", "1571818", 5, 10], ["Storvreta IBK", "1571822", 5, 10], ["Storvreta IBK", "1571829", 5, 10], ["Storvreta IBK", "1571835", 5, 10]], "hovertemplate": "Goalie=Emil Lindblom (23 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Emil Lindblom (23 år)", "line": {"color": "#19d3f3", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Emil Lindblom (23 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-02T00:00:00", "2000-01-09T00:00:00", "2000-01-21T00:00:00", "2000-01-26T00:00:00", "2000-01-30T00:00:00", "2000-02-11T00:00:00", "2000-02-14T00:00:00", "2000-02-25T00:00:00", "2000-02-29T00:00:00", "2000-03-07T00:00:00", "2000-03-13T00:00:00"], "xaxis": "x", "y": [null, null, null, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5], "yaxis": "y", "type": "scatter"}, {"customdata": [["Storvreta IBK", "1571764", 9, 11], ["Storvreta IBK", "1571771", 15, 20], ["Storvreta IBK", "1571783", 24, 30], ["Storvreta IBK", "1571788", 24, 30], ["Storvreta IBK", "1571792", 30, 40], ["Storvreta IBK", "1571804", 48, 61], ["Storvreta IBK", "1571807", 55, 72], ["Storvreta IBK", "1571818", 75, 95], ["Storvreta IBK", "1571822", 87, 111], ["Storvreta IBK", "1571829", 99, 127], ["Storvreta IBK", "1571835", 116, 147]], "hovertemplate": "Goalie=Måns Parsjö (31 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Måns Parsjö (31 år)", "line": {"color": "#FF6692", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Måns Parsjö (31 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-02T00:00:00", "2000-01-09T00:00:00", "2000-01-21T00:00:00", "2000-01-26T00:00:00", "2000-01-30T00:00:00", "2000-02-11T00:00:00", "2000-02-14T00:00:00", "2000-02-25T00:00:00", "2000-02-29T00:00:00", "2000-03-07T00:00:00", "2000-03-13T00:00:00"], "xaxis": "x", "y": [0.8181818181818182, 0.75, 0.8, 0.8, 0.75, 0.7868852459016393, 0.7638888888888888, 0.7894736842105263, 0.7837837837837838, 0.7795275590551181, 0.7891156462585034], "yaxis": "y", "type": "scatter"}, {"customdata": [["Hovslätts IK", "1571765", 3, 8], ["Hovslätts IK", "1571775", 3, 8], ["Hovslätts IK", "1571780", 3, 8], ["Hovslätts IK", "1571787", 13, 33], ["Hovslätts IK", "1571815", 13, 33], ["Hovslätts IK", "1571823", 13, 33], ["Hovslätts IK", "1571830", 13, 33]], "hovertemplate": "Goalie=David Andersson (23 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "David Andersson (23 år)", "line": {"color": "#B6E880", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "David Andersson (23 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-03T00:00:00", "2000-01-13T00:00:00", "2000-01-18T00:00:00", "2000-01-25T00:00:00", "2000-02-22T00:00:00", "2000-03-01T00:00:00", "2000-03-08T00:00:00"], "xaxis": "x", "y": [0.375, 0.375, 0.375, 0.3939393939393939, 0.3939393939393939, 0.3939393939393939, 0.3939393939393939], "yaxis": "y", "type": "scatter"}, {"customdata": [["Hovslätts IK", "1571765", 21, 28], ["Hovslätts IK", "1571775", 31, 44], ["Hovslätts IK", "1571780", 51, 72], ["Hovslätts IK", "1571787", 51, 72], ["Hovslätts IK", "1571792", 51, 72], ["Hovslätts IK", "1571800", 51, 72], ["Hovslätts IK", "1571808", 51, 72], ["Hovslätts IK", "1571833", 51, 72]], "hovertemplate": "Goalie=Philip Axelsson (24 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Philip Axelsson (24 år)", "line": {"color": "#FF97FF", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Philip Axelsson (24 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-03T00:00:00", "2000-01-13T00:00:00", "2000-01-18T00:00:00", "2000-01-25T00:00:00", "2000-01-30T00:00:00", "2000-02-07T00:00:00", "2000-02-15T00:00:00", "2000-03-11T00:00:00"], "xaxis": "x", "y": [0.75, 0.7045454545454546, 0.7083333333333334, 0.7083333333333334, 0.7083333333333334, 0.7083333333333334, 0.7083333333333334, 0.7083333333333334], "yaxis": "y", "type": "scatter"}, {"customdata": [["Mullsjö AIS", "1571765", 10, 16], ["Mullsjö AIS", "1571773", 10, 16], ["Mullsjö AIS", "1571782", 23, 37], ["Mullsjö AIS", "1571785", 23, 37], ["Mullsjö AIS", "1571794", 46, 62], ["Mullsjö AIS", "1571802", 65, 86], ["Mullsjö AIS", "1571805", 90, 114], ["Mullsjö AIS", "1571813", 104, 131], ["Mullsjö AIS", "1571822", 104, 131], ["Mullsjö AIS", "1571826", 114, 146], ["Mullsjö AIS", "1571836", 131, 166], ["Mullsjö AIS", "1571842", 159, 202]], "hovertemplate": "Goalie=Gustav Jansson (34 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Gustav Jansson (34 år)", "line": {"color": "#FECB52", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Gustav Jansson (34 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-03T00:00:00", "2000-01-11T00:00:00", "2000-01-20T00:00:00", "2000-01-23T00:00:00", "2000-02-01T00:00:00", "2000-02-09T00:00:00", "2000-02-12T00:00:00", "2000-02-20T00:00:00", "2000-02-29T00:00:00", "2000-03-04T00:00:00", "2000-03-14T00:00:00", "2000-03-20T00:00:00"], "xaxis": "x", "y": [0.625, 0.625, 0.6216216216216216, 0.6216216216216216, 0.7419354838709677, 0.7558139534883721, 0.7894736842105263, 0.7938931297709924, 0.7938931297709924, 0.7808219178082192, 0.7891566265060241, 0.7871287128712872], "yaxis": "y", "type": "scatter"}, {"customdata": [["Mullsjö AIS", "1571765", 0, 0], ["Mullsjö AIS", "1571773", 19, 21], ["Mullsjö AIS", "1571782", 19, 21], ["Mullsjö AIS", "1571785", 46, 56], ["Mullsjö AIS", "1571794", 46, 57], ["Mullsjö AIS", "1571802", 46, 57], ["Mullsjö AIS", "1571805", 46, 57], ["Mullsjö AIS", "1571813", 46, 57], ["Mullsjö AIS", "1571822", 54, 72], ["Mullsjö AIS", "1571826", 54, 72], ["Mullsjö AIS", "1571836", 54, 72], ["Mullsjö AIS", "1571842", 54, 72]], "hovertemplate": "Goalie=Samuel Jönsson Dolke (20 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Samuel Jönsson Dolke (20 år)", "line": {"color": "#636efa", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Samuel Jönsson Dolke (20 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-03T00:00:00", "2000-01-11T00:00:00", "2000-01-20T00:00:00", "2000-01-23T00:00:00", "2000-02-01T00:00:00", "2000-02-09T00:00:00", "2000-02-12T00:00:00", "2000-02-20T00:00:00", "2000-02-29T00:00:00", "2000-03-04T00:00:00", "2000-03-14T00:00:00", "2000-03-20T00:00:00"], "xaxis": "x", "y": [null, 0.9047619047619048, 0.9047619047619048, 0.8214285714285714, 0.8070175438596491, 0.8070175438596491, 0.8070175438596491, 0.8070175438596491, 0.75, 0.75, 0.75, 0.75], "yaxis": "y", "type": "scatter"}, {"customdata": [["IBF Falun", "1571766", 0, 0], ["IBF Falun", "1571774", 0, 0], ["IBF Falun", "1571781", 0, 0], ["IBF Falun", "1571790", 0, 0], ["IBF Falun", "1571794", 0, 0], ["IBF Falun", "1571801", 0, 0], ["IBF Falun", "1571810", 0, 0], ["IBF Falun", "1571815", 26, 32], ["IBF Falun", "1571825", 26, 32], ["IBF Falun", "1571829", 26, 32], ["IBF Falun", "1571834", 44, 57]], "hovertemplate": "Goalie=Victor Frejd (25 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Victor Frejd (25 år)", "line": {"color": "#EF553B", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Victor Frejd (25 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-04T00:00:00", "2000-01-12T00:00:00", "2000-01-19T00:00:00", "2000-01-28T00:00:00", "2000-02-01T00:00:00", "2000-02-08T00:00:00", "2000-02-17T00:00:00", "2000-02-22T00:00:00", "2000-03-03T00:00:00", "2000-03-07T00:00:00", "2000-03-12T00:00:00"], "xaxis": "x", "y": [null, null, null, null, null, null, null, 0.8125, 0.8125, 0.8125, 0.7719298245614035], "yaxis": "y", "type": "scatter"}, {"customdata": [["IBF Falun", "1571766", 8, 11], ["IBF Falun", "1571774", 27, 35], ["IBF Falun", "1571781", 48, 62], ["IBF Falun", "1571790", 64, 83], ["IBF Falun", "1571794", 81, 109], ["IBF Falun", "1571801", 96, 129], ["IBF Falun", "1571810", 115, 155], ["IBF Falun", "1571815", 115, 155], ["IBF Falun", "1571825", 133, 173], ["IBF Falun", "1571829", 147, 191], ["IBF Falun", "1571834", 147, 191]], "hovertemplate": "Goalie=Carl Bending-Sörling (31 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Carl Bending-Sörling (31 år)", "line": {"color": "#00cc96", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Carl Bending-Sörling (31 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-04T00:00:00", "2000-01-12T00:00:00", "2000-01-19T00:00:00", "2000-01-28T00:00:00", "2000-02-01T00:00:00", "2000-02-08T00:00:00", "2000-02-17T00:00:00", "2000-02-22T00:00:00", "2000-03-03T00:00:00", "2000-03-07T00:00:00", "2000-03-12T00:00:00"], "xaxis": "x", "y": [0.7272727272727273, 0.7714285714285715, 0.7741935483870968, 0.7710843373493976, 0.7431192660550459, 0.7441860465116279, 0.7419354838709677, 0.7419354838709677, 0.7687861271676301, 0.7696335078534031, 0.7696335078534031], "yaxis": "y", "type": "scatter"}, {"customdata": [["Warberg IC", "1571766", 15, 21], ["Warberg IC", "1571772", 25, 36], ["Warberg IC", "1571777", 48, 63], ["Warberg IC", "1571784", 65, 82], ["Warberg IC", "1571793", 69, 89], ["Warberg IC", "1571803", 85, 111], ["Warberg IC", "1571808", 105, 136], ["Warberg IC", "1571816", 121, 155], ["Warberg IC", "1571820", 134, 173], ["Warberg IC", "1571828", 152, 195], ["Warberg IC", "1571836", 170, 223]], "hovertemplate": "Goalie=Olle Jonsson (25 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Olle Jonsson (25 år)", "line": {"color": "#ab63fa", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Olle Jonsson (25 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-04T00:00:00", "2000-01-10T00:00:00", "2000-01-15T00:00:00", "2000-01-22T00:00:00", "2000-01-31T00:00:00", "2000-02-10T00:00:00", "2000-02-15T00:00:00", "2000-02-23T00:00:00", "2000-02-27T00:00:00", "2000-03-06T00:00:00", "2000-03-14T00:00:00"], "xaxis": "x", "y": [0.7142857142857143, 0.6944444444444444, 0.7619047619047619, 0.7926829268292683, 0.7752808988764045, 0.7657657657657657, 0.7720588235294118, 0.7806451612903226, 0.7745664739884393, 0.7794871794871795, 0.7623318385650224], "yaxis": "y", "type": "scatter"}, {"customdata": [["Warberg IC", "1571766", 9, 12], ["Warberg IC", "1571772", 9, 12], ["Warberg IC", "1571777", 9, 12], ["Warberg IC", "1571784", 9, 12], ["Warberg IC", "1571793", 24, 30], ["Warberg IC", "1571803", 24, 30], ["Warberg IC", "1571808", 24, 30], ["Warberg IC", "1571816", 24, 30], ["Warberg IC", "1571820", 24, 30], ["Warberg IC", "1571828", 24, 30], ["Warberg IC", "1571836", 24, 30]], "hovertemplate": "Goalie=Nicholay Halvorsen (25 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Nicholay Halvorsen (25 år)", "line": {"color": "#FFA15A", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Nicholay Halvorsen (25 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-04T00:00:00", "2000-01-10T00:00:00", "2000-01-15T00:00:00", "2000-01-22T00:00:00", "2000-01-31T00:00:00", "2000-02-10T00:00:00", "2000-02-15T00:00:00", "2000-02-23T00:00:00", "2000-02-27T00:00:00", "2000-03-06T00:00:00", "2000-03-14T00:00:00"], "xaxis": "x", "y": [0.75, 0.75, 0.75, 0.75, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8], "yaxis": "y", "type": "scatter"}, {"customdata": [["AIK IBF", "1571767", 17, 22], ["AIK IBF", "1571783", 31, 43]], "hovertemplate": "Goalie=Andreas Beckius (35 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Andreas Beckius (35 år)", "line": {"color": "#19d3f3", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Andreas Beckius (35 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-05T00:00:00", "2000-01-21T00:00:00"], "xaxis": "x", "y": [0.7727272727272727, 0.7209302325581395], "yaxis": "y", "type": "scatter"}, {"customdata": [["Växjö IBK", "1571767", 22, 26], ["Växjö IBK", "1571774", 41, 51], ["Växjö IBK", "1571779", 59, 70], ["Växjö IBK", "1571786", 69, 84], ["Växjö IBK", "1571796", 79, 100], ["Växjö IBK", "1571800", 95, 119], ["Växjö IBK", "1571805", 115, 143], ["Växjö IBK", "1571812", 120, 155], ["Växjö IBK", "1571820", 131, 173], ["Växjö IBK", "1571827", 139, 185], ["Växjö IBK", "1571837", 148, 197]], "hovertemplate": "Goalie=Santtu Strandberg (34 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Santtu Strandberg (34 år)", "line": {"color": "#FF6692", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Santtu Strandberg (34 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-05T00:00:00", "2000-01-12T00:00:00", "2000-01-17T00:00:00", "2000-01-24T00:00:00", "2000-02-03T00:00:00", "2000-02-07T00:00:00", "2000-02-12T00:00:00", "2000-02-19T00:00:00", "2000-02-27T00:00:00", "2000-03-05T00:00:00", "2000-03-15T00:00:00"], "xaxis": "x", "y": [0.8461538461538461, 0.803921568627451, 0.8428571428571429, 0.8214285714285714, 0.79, 0.7983193277310925, 0.8041958041958042, 0.7741935483870968, 0.7572254335260116, 0.7513513513513513, 0.751269035532995], "yaxis": "y", "type": "scatter"}, {"customdata": [["Nykvarns IBF", "1571768", 0, 0], ["Nykvarns IBF", "1571771", 17, 27], ["Nykvarns IBF", "1571778", 17, 27], ["Nykvarns IBF", "1571785", 17, 27], ["Nykvarns IBF", "1571796", 17, 27], ["Nykvarns IBF", "1571803", 17, 27], ["Nykvarns IBF", "1571810", 17, 27], ["Nykvarns IBF", "1571817", 17, 27], ["Nykvarns IBF", "1571824", 17, 27], ["Nykvarns IBF", "1571831", 17, 27], ["Nykvarns IBF", "1571839", 17, 27]], "hovertemplate": "Goalie=Jesper Ahrén (23 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Jesper Ahrén (23 år)", "line": {"color": "#B6E880", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Jesper Ahrén (23 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-06T00:00:00", "2000-01-09T00:00:00", "2000-01-16T00:00:00", "2000-01-23T00:00:00", "2000-02-03T00:00:00", "2000-02-10T00:00:00", "2000-02-17T00:00:00", "2000-02-24T00:00:00", "2000-03-02T00:00:00", "2000-03-09T00:00:00", "2000-03-17T00:00:00"], "xaxis": "x", "y": [null, 0.6296296296296297, 0.6296296296296297, 0.6296296296296297, 0.6296296296296297, 0.6296296296296297, 0.6296296296296297, 0.6296296296296297, 0.6296296296296297, 0.6296296296296297, 0.6296296296296297], "yaxis": "y", "type": "scatter"}, {"customdata": [["Nykvarns IBF", "1571768", 21, 25], ["Nykvarns IBF", "1571771", 21, 25], ["Nykvarns IBF", "1571778", 39, 50], ["Nykvarns IBF", "1571785", 59, 77], ["Nykvarns IBF", "1571796", 76, 100], ["Nykvarns IBF", "1571803", 102, 130], ["Nykvarns IBF", "1571810", 132, 166], ["Nykvarns IBF", "1571817", 148, 192], ["Nykvarns IBF", "1571824", 163, 211], ["Nykvarns IBF", "1571831", 184, 237], ["Nykvarns IBF", "1571839", 204, 260]], "hovertemplate": "Goalie=Lucas Orrmo (37 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Lucas Orrmo (37 år)", "line": {"color": "#FF97FF", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Lucas Orrmo (37 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-06T00:00:00", "2000-01-09T00:00:00", "2000-01-16T00:00:00", "2000-01-23T00:00:00", "2000-02-03T00:00:00", "2000-02-10T00:00:00", "2000-02-17T00:00:00", "2000-02-24T00:00:00", "2000-03-02T00:00:00", "2000-03-09T00:00:00", "2000-03-17T00:00:00"], "xaxis": "x", "y": [0.84, 0.84, 0.78, 0.7662337662337663, 0.76, 0.7846153846153846, 0.7951807228915663, 0.7708333333333334, 0.7725118483412322, 0.7763713080168776, 0.7846153846153846], "yaxis": "y", "type": "scatter"}, {"customdata": [["Visby IBK", "1571768", 28, 34], ["Visby IBK", "1571775", 43, 54], ["Visby IBK", "1571781", 69, 92], ["Visby IBK", "1571788", 69, 92], ["Visby IBK", "1571797", 93, 119], ["Visby IBK", "1571798", 113, 142], ["Visby IBK", "1571806", 130, 161], ["Visby IBK", "1571814", 153, 190], ["Visby IBK", "1571821", 170, 211], ["Visby IBK", "1571828", 185, 233], ["Visby IBK", "1571838", 208, 262]], "hovertemplate": "Goalie=Rasmus Ekström (30 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Rasmus Ekström (30 år)", "line": {"color": "#FECB52", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Rasmus Ekström (30 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-06T00:00:00", "2000-01-13T00:00:00", "2000-01-19T00:00:00", "2000-01-26T00:00:00", "2000-02-04T00:00:00", "2000-02-05T00:00:00", "2000-02-13T00:00:00", "2000-02-21T00:00:00", "2000-02-28T00:00:00", "2000-03-06T00:00:00", "2000-03-16T00:00:00"], "xaxis": "x", "y": [0.8235294117647058, 0.7962962962962963, 0.75, 0.75, 0.7815126050420168, 0.795774647887324, 0.8074534161490683, 0.8052631578947368, 0.8056872037914692, 0.7939914163090128, 0.7938931297709924], "yaxis": "y", "type": "scatter"}, {"customdata": [["Visby IBK", "1571768", 0, 0], ["Visby IBK", "1571775", 0, 0], ["Visby IBK", "1571781", 0, 0], ["Visby IBK", "1571788", 9, 17], ["Visby IBK", "1571797", 9, 17], ["Visby IBK", "1571798", 9, 17], ["Visby IBK", "1571806", 9, 17], ["Visby IBK", "1571814", 9, 17], ["Visby IBK", "1571821", 9, 17], ["Visby IBK", "1571828", 9, 17], ["Visby IBK", "1571838", 9, 17]], "hovertemplate": "Goalie=Andreas Egegård (28 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Andreas Egegård (28 år)", "line": {"color": "#636efa", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Andreas Egegård (28 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-06T00:00:00", "2000-01-13T00:00:00", "2000-01-19T00:00:00", "2000-01-26T00:00:00", "2000-02-04T00:00:00", "2000-02-05T00:00:00", "2000-02-13T00:00:00", "2000-02-21T00:00:00", "2000-02-28T00:00:00", "2000-03-06T00:00:00", "2000-03-16T00:00:00"], "xaxis": "x", "y": [null, null, null, 0.5294117647058824, 0.5294117647058824, 0.5294117647058824, 0.5294117647058824, 0.5294117647058824, 0.5294117647058824, 0.5294117647058824, 0.5294117647058824], "yaxis": "y", "type": "scatter"}, {"customdata": [["Pixbo IBK", "1571769", 18, 20], ["Pixbo IBK", "1571772", 35, 39], ["Pixbo IBK", "1571779", 51, 58], ["Pixbo IBK", "1571787", 51, 58], ["Pixbo IBK", "1571797", 65, 76], ["Pixbo IBK", "1571804", 86, 99], ["Pixbo IBK", "1571811", 86, 99], ["Pixbo IBK", "1571813", 103, 119], ["Pixbo IBK", "1571825", 123, 143], ["Pixbo IBK", "1571832", 150, 173], ["Pixbo IBK", "1571839", 171, 196]], "hovertemplate": "Goalie=Jon Hedlund (34 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Jon Hedlund (34 år)", "line": {"color": "#EF553B", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Jon Hedlund (34 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-07T00:00:00", "2000-01-10T00:00:00", "2000-01-17T00:00:00", "2000-01-25T00:00:00", "2000-02-04T00:00:00", "2000-02-11T00:00:00", "2000-02-18T00:00:00", "2000-02-20T00:00:00", "2000-03-03T00:00:00", "2000-03-10T00:00:00", "2000-03-17T00:00:00"], "xaxis": "x", "y": [0.9, 0.8974358974358975, 0.8793103448275862, 0.8793103448275862, 0.8552631578947368, 0.8686868686868687, 0.8686868686868687, 0.865546218487395, 0.8601398601398601, 0.8670520231213873, 0.8724489795918368], "yaxis": "y", "type": "scatter"}, {"customdata": [["Pixbo IBK", "1571769", 0, 0], ["Pixbo IBK", "1571772", 0, 0], ["Pixbo IBK", "1571779", 0, 0], ["Pixbo IBK", "1571787", 12, 18], ["Pixbo IBK", "1571797", 12, 18], ["Pixbo IBK", "1571804", 12, 18], ["Pixbo IBK", "1571811", 27, 41], ["Pixbo IBK", "1571813", 27, 41], ["Pixbo IBK", "1571825", 27, 41], ["Pixbo IBK", "1571839", 27, 41]], "hovertemplate": "Goalie=Liam Juhlin (19 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Liam Juhlin (19 år)", "line": {"color": "#00cc96", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Liam Juhlin (19 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-07T00:00:00", "2000-01-10T00:00:00", "2000-01-17T00:00:00", "2000-01-25T00:00:00", "2000-02-04T00:00:00", "2000-02-11T00:00:00", "2000-02-18T00:00:00", "2000-02-20T00:00:00", "2000-03-03T00:00:00", "2000-03-17T00:00:00"], "xaxis": "x", "y": [null, null, null, 0.6666666666666666, 0.6666666666666666, 0.6666666666666666, 0.6585365853658537, 0.6585365853658537, 0.6585365853658537, 0.6585365853658537], "yaxis": "y", "type": "scatter"}, {"customdata": [["FBC Kalmarsund", "1571769", 0, 0], ["FBC Kalmarsund", "1571776", 0, 0], ["FBC Kalmarsund", "1571780", 0, 0], ["FBC Kalmarsund", "1571784", 0, 0], ["FBC Kalmarsund", "1571795", 0, 0], ["FBC Kalmarsund", "1571799", 0, 0], ["FBC Kalmarsund", "1571807", 0, 0], ["FBC Kalmarsund", "1571814", 1, 1], ["FBC Kalmarsund", "1571819", 1, 1], ["FBC Kalmarsund", "1571831", 1, 1], ["FBC Kalmarsund", "1571837", 1, 1], ["FBC Kalmarsund", "1571842", 1, 1]], "hovertemplate": "Goalie=Axel Adebrink (20 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Axel Adebrink (20 år)", "line": {"color": "#ab63fa", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Axel Adebrink (20 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-07T00:00:00", "2000-01-14T00:00:00", "2000-01-18T00:00:00", "2000-01-22T00:00:00", "2000-02-02T00:00:00", "2000-02-06T00:00:00", "2000-02-14T00:00:00", "2000-02-21T00:00:00", "2000-02-26T00:00:00", "2000-03-09T00:00:00", "2000-03-15T00:00:00", "2000-03-20T00:00:00"], "xaxis": "x", "y": [null, null, null, null, null, null, null, 1.0, 1.0, 1.0, 1.0, 1.0], "yaxis": "y", "type": "scatter"}, {"customdata": [["FBC Kalmarsund", "1571769", 19, 22], ["FBC Kalmarsund", "1571776", 32, 38], ["FBC Kalmarsund", "1571780", 45, 53], ["FBC Kalmarsund", "1571784", 57, 68], ["FBC Kalmarsund", "1571795", 71, 87], ["FBC Kalmarsund", "1571799", 84, 104], ["FBC Kalmarsund", "1571807", 101, 126], ["FBC Kalmarsund", "1571814", 114, 144], ["FBC Kalmarsund", "1571819", 134, 168], ["FBC Kalmarsund", "1571831", 148, 188], ["FBC Kalmarsund", "1571837", 166, 209], ["FBC Kalmarsund", "1571842", 184, 233]], "hovertemplate": "Goalie=Pontus Zarins (27 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Pontus Zarins (27 år)", "line": {"color": "#FFA15A", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Pontus Zarins (27 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-07T00:00:00", "2000-01-14T00:00:00", "2000-01-18T00:00:00", "2000-01-22T00:00:00", "2000-02-02T00:00:00", "2000-02-06T00:00:00", "2000-02-14T00:00:00", "2000-02-21T00:00:00", "2000-02-26T00:00:00", "2000-03-09T00:00:00", "2000-03-15T00:00:00", "2000-03-20T00:00:00"], "xaxis": "x", "y": [0.8636363636363636, 0.8421052631578947, 0.8490566037735849, 0.8382352941176471, 0.8160919540229885, 0.8076923076923077, 0.8015873015873016, 0.7916666666666666, 0.7976190476190477, 0.7872340425531915, 0.7942583732057417, 0.7896995708154506], "yaxis": "y", "type": "scatter"}, {"customdata": [["AIK IBF", "1571770", 34, 39], ["AIK IBF", "1571790", 56, 67], ["AIK IBF", "1571795", 78, 95], ["AIK IBF", "1571802", 101, 123], ["AIK IBF", "1571809", 127, 155], ["AIK IBF", "1571816", 144, 178], ["AIK IBF", "1571824", 162, 206], ["AIK IBF", "1571832", 172, 221], ["AIK IBF", "1571838", 194, 250]], "hovertemplate": "Goalie=Jonathan Hjelm (27 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Jonathan Hjelm (27 år)", "line": {"color": "#19d3f3", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Jonathan Hjelm (27 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-08T00:00:00", "2000-01-28T00:00:00", "2000-02-02T00:00:00", "2000-02-09T00:00:00", "2000-02-16T00:00:00", "2000-02-23T00:00:00", "2000-03-02T00:00:00", "2000-03-10T00:00:00", "2000-03-16T00:00:00"], "xaxis": "x", "y": [0.8717948717948718, 0.835820895522388, 0.8210526315789474, 0.8211382113821138, 0.8193548387096774, 0.8089887640449438, 0.7864077669902912, 0.7782805429864253, 0.776], "yaxis": "y", "type": "scatter"}, {"customdata": [["Hovslätts IK", "1571792", 14, 19], ["Hovslätts IK", "1571800", 33, 46], ["Hovslätts IK", "1571808", 44, 63], ["Hovslätts IK", "1571815", 69, 98], ["Hovslätts IK", "1571823", 82, 118], ["Hovslätts IK", "1571830", 102, 147], ["Hovslätts IK", "1571833", 126, 179]], "hovertemplate": "Goalie=Gustav Ringhagen (22 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Gustav Ringhagen (22 år)", "line": {"color": "#FF6692", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Gustav Ringhagen (22 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-30T00:00:00", "2000-02-07T00:00:00", "2000-02-15T00:00:00", "2000-02-22T00:00:00", "2000-03-01T00:00:00", "2000-03-08T00:00:00", "2000-03-11T00:00:00"], "xaxis": "x", "y": [0.7368421052631579, 0.717391304347826, 0.6984126984126984, 0.7040816326530612, 0.6949152542372882, 0.6938775510204082, 0.7039106145251397], "yaxis": "y", "type": "scatter"}], "layout": {"template": {"data": {"histogram2dcontour": [{"type": "histogram2dcontour", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "choropleth": [{"type": "choropleth", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "histogram2d": [{"type": "histogram2d", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "heatmap": [{"type": "heatmap", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "heatmapgl": [{"type": "heatmapgl", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "contourcarpet": [{"type": "contourcarpet", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "contour": [{"type": "contour", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "surface": [{"type": "surface", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "mesh3d": [{"type": "mesh3d", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "scatter": [{"fillpattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}, "type": "scatter"}], "parcoords": [{"type": "parcoords", "line": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterpolargl": [{"type": "scatterpolargl", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "bar": [{"error_x": {"color": "#2a3f5f"}, "error_y": {"color": "#2a3f5f"}, "marker": {"line": {"color": "#E5ECF6", "width": 0.5}, "pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "bar"}], "scattergeo": [{"type": "scattergeo", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterpolar": [{"type": "scatterpolar", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "histogram": [{"marker": {"pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "histogram"}], "scattergl": [{"type": "scattergl", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatter3d": [{"type": "scatter3d", "line": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scattermapbox": [{"type": "scattermapbox", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterternary": [{"type": "scatterternary", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scattercarpet": [{"type": "scattercarpet", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "carpet": [{"aaxis": {"endlinecolor": "#2a3f5f", "gridcolor": "white", "linecolor": "white", "minorgridcolor": "white", "startlinecolor": "#2a3f5f"}, "baxis": {"endlinecolor": "#2a3f5f", "gridcolor": "white", "linecolor": "white", "minorgridcolor": "white", "startlinecolor": "#2a3f5f"}, "type": "carpet"}], "table": [{"cells": {"fill": {"color": "#EBF0F8"}, "line": {"color": "white"}}, "header": {"fill": {"color": "#C8D4E3"}, "line": {"color": "white"}}, "type": "table"}], "barpolar": [{"marker": {"line": {"color": "#E5ECF6", "width": 0.5}, "pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "barpolar"}], "pie": [{"automargin": true, "type": "pie"}]}, "layout": {"autotypenumbers": "strict", "colorway": ["#636efa", "#EF553B", "#00cc96", "#ab63fa", "#FFA15A", "#19d3f3", "#FF6692", "#B6E880", "#FF97FF", "#FECB52"], "font": {"color": "#2a3f5f"}, "hovermode": "closest", "hoverlabel": {"align": "left"}, "paper_bgcolor": "white", "plot_bgcolor": "#E5ECF6", "polar": {"bgcolor": "#E5ECF6", "angularaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "radialaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}}, "ternary": {"bgcolor": "#E5ECF6", "aaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "baxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "caxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}}, "coloraxis": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "colorscale": {"sequential": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]], "sequentialminus": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]], "diverging": [[0, "#8e0152"], [0.1, "#c51b7d"], [0.2, "#de77ae"], [0.3, "#f1b6da"], [0.4, "#fde0ef"], [0.5, "#f7f7f7"], [0.6, "#e6f5d0"], [0.7, "#b8e186"], [0.8, "#7fbc41"], [0.9, "#4d9221"], [1, "#276419"]]}, "xaxis": {"gridcolor": "white", "linecolor": "white", "ticks": "", "title": {"standoff": 15}, "zerolinecolor": "white", "automargin": true, "zerolinewidth": 2}, "yaxis": {"gridcolor": "white", "linecolor": "white", "ticks": "", "title": {"standoff": 15}, "zerolinecolor": "white", "automargin": true, "zerolinewidth": 2}, "scene": {"xaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}, "yaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}, "zaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}}, "shapedefaults": {"line": {"color": "#2a3f5f"}}, "annotationdefaults": {"arrowcolor": "#2a3f5f", "arrowhead": 0, "arrowwidth": 1}, "geo": {"bgcolor": "white", "landcolor": "#E5ECF6", "subunitcolor": "white", "showland": true, "showlakes": true, "lakecolor": "white"}, "title": {"x": 0.05}, "mapbox": {"style": "light"}}}, "xaxis": {"anchor": "y", "domain": [0.0, 1.0], "title": {"text": "Date"}, "rangeslider": {"visible": true}}, "yaxis": {"anchor": "x", "domain": [0.0, 1.0], "title": {"text": "Cumulative Save %"}, "tickformat": ".0%", "rangemode": "tozero"}, "legend": {"title": {"text": "Goalie"}, "tracegroupgap": 0}, "margin": {"t": 60}, "title": {"text": "Goalie cumulative save percentage over time"}, "hovermode": "x unified", "annotations": [{"align": "right", "bgcolor": "rgba(0,0,0,0.4)", "bordercolor": "rgba(255,255,255,0.2)", "borderpad": 6, "borderwidth": 1, "font": {"size": 12}, "showarrow": false, "text": "<b>Filtered (0 shots):</b><br>• Gustav Sundqvist (28 år)<br>• Kevin Bergman (20 år)<br>• Lauritz Brunborg (17 år)<br>• Martin Wallberg (20 år)<br>• Melvin Hildingsson (18 år)<br>• Noel Johansson (19 år)<br>• Oskar Bäckman (19 år)<br>• Pontus Bäckman (22 år)", "x": 1.0, "xanchor": "right", "xref": "paper", "y": 1.0, "yanchor": "top", "yref": "paper"}]}}, "summary_records": [{"team": "AIK IBF", "goalie": "Andreas Beckius (35 år)", "games_played": 2, "total_shots": 43, "total_saves": 31, "goals_against": 12, "final_save_pct": 0.7209302325581395, "avg_shots_per_game": 21.5, "save_pct_display": "72.1%"}, {"team": "AIK IBF", "goalie": "Jonathan Hjelm (27 år)", "games_played": 9, "total_shots": 250, "total_saves": 194, "goals_against": 56, "final_save_pct": 0.776, "avg_shots_per_game": 27.77777777777778, "save_pct_display": "77.6%"}, {"team": "FBC Kalmarsund", "goalie": "Axel Adebrink (20 år)", "games_played": 12, "total_shots": 1, "total_saves": 1, "goals_against": 0, "final_save_pct": 1.0, "avg_shots_per_game": 0.08333333333333333, "save_pct_display": "100.0%"}, {"team": "FBC Kalmarsund", "goalie": "Pontus Zarins (27 år)", "games_played": 12, "total_shots": 233, "total_saves": 184, "goals_against": 49, "final_save_pct": 0.7896995708154506, "avg_shots_per_game": 19.416666666666668, "save_pct_display": "79.0%"}, {"team": "Hovslätts IK", "goalie": "David Andersson (23 år)", "games_played": 7, "total_shots": 33, "total_saves": 13, "goals_against": 20, "final_save_pct": 0.3939393939393939, "avg_shots_per_game": 4.714285714285714, "save_pct_display": "39.4%"}, {"team": "Hovslätts IK", "goalie": "Gustav Ringhagen (22 år)", "games_played": 7, "total_shots": 179, "total_saves": 126, "goals_against": 53, "final_save_pct": 0.7039106145251397, "avg_shots_per_game": 25.571428571428573, "save_pct_display": "70.4%"}, {"team": "Hovslätts IK", "goalie": "Philip Axelsson (24 år)", "games_played": 8, "total_shots": 72, "total_saves": 51, "goals_against": 21, "final_save_pct": 0.7083333333333334, "avg_shots_per_game": 9.0, "save_pct_display": "70.8%"}, {"team": "IBF Falun", "goalie": "Carl Bending-Sörling (31 år)", "games_played": 11, "total_shots": 191, "total_saves": 147, "goals_against": 44, "final_save_pct": 0.7696335078534031, "avg_shots_per_game": 17.363636363636363, "save_pct_display": "77.0%"}, {"team": "IBF Falun", "goalie": "Victor Frejd (25 år)", "games_played": 11, "total_shots": 57, "total_saves": 44, "goals_against": 13, "final_save_pct": 0.7719298245614035, "avg_shots_per_game": 5.181818181818182, "save_pct_display": "77.2%"}, {"team": "Jönköpings IK", "goalie": "Alessio Mura (21 år)", "games_played": 10, "total_shots": 6, "total_saves": 5, "goals_against": 1, "final_save_pct": 0.8333333333333334, "avg_shots_per_game": 0.6, "save_pct_display": "83.3%"}, {"team": "Jönköpings IK", "goalie": "Emil Ödman (23 år)", "games_played": 11, "total_shots": 205, "total_saves": 148, "goals_against": 57, "final_save_pct": 0.7219512195121951, "avg_shots_per_game": 18.636363636363637, "save_pct_display": "72.2%"}, {"team": "Linköping IBK", "goalie": "Tomas Jurco (21 år)", "games_played": 11, "total_shots": 231, "total_saves": 179, "goals_against": 52, "final_save_pct": 0.7748917748917749, "avg_shots_per_game": 21.0, "save_pct_display": "77.5%"}, {"team": "Mullsjö AIS", "goalie": "Gustav Jansson (34 år)", "games_played": 12, "total_shots": 202, "total_saves": 159, "goals_against": 43, "final_save_pct": 0.7871287128712872, "avg_shots_per_game": 16.833333333333332, "save_pct_display": "78.7%"}, {"team": "Mullsjö AIS", "goalie": "Samuel Jönsson Dolke (20 år)", "games_played": 12, "total_shots": 72, "total_saves": 54, "goals_against": 18, "final_save_pct": 0.75, "avg_shots_per_game": 6.0, "save_pct_display": "75.0%"}, {"team": "Nykvarns IBF", "goalie": "Jesper Ahrén (23 år)", "games_played": 11, "total_shots": 27, "total_saves": 17, "goals_against": 10, "final_save_pct": 0.6296296296296297, "avg_shots_per_game": 2.4545454545454546, "save_pct_display": "63.0%"}, {"team": "Nykvarns IBF", "goalie": "Lucas Orrmo (37 år)", "games_played": 11, "total_shots": 260, "total_saves": 204, "goals_against": 56, "final_save_pct": 0.7846153846153846, "avg_shots_per_game": 23.636363636363637, "save_pct_display": "78.5%"}, {"team": "Pixbo IBK", "goalie": "Jon Hedlund (34 år)", "games_played": 11, "total_shots": 196, "total_saves": 171, "goals_against": 25, "final_save_pct": 0.8724489795918368, "avg_shots_per_game": 17.818181818181817, "save_pct_display": "87.2%"}, {"team": "Pixbo IBK", "goalie": "Liam Juhlin (19 år)", "games_played": 10, "total_shots": 41, "total_saves": 27, "goals_against": 14, "final_save_pct": 0.6585365853658537, "avg_shots_per_game": 4.1, "save_pct_display": "65.9%"}, {"team": "Storvreta IBK", "goalie": "Emil Lindblom (23 år)", "games_played": 11, "total_shots": 10, "total_saves": 5, "goals_against": 5, "final_save_pct": 0.5, "avg_shots_per_game": 0.9090909090909091, "save_pct_display": "50.0%"}, {"team": "Storvreta IBK", "goalie": "Måns Parsjö (31 år)", "games_played": 11, "total_shots": 147, "total_saves": 116, "goals_against": 31, "final_save_pct": 0.7891156462585034, "avg_shots_per_game": 13.363636363636363, "save_pct_display": "78.9%"}, {"team": "Strängnäs IBK", "goalie": "Oskar-Viking Tjärnberg (28 år)", "games_played": 11, "total_shots": 206, "total_saves": 152, "goals_against": 54, "final_save_pct": 0.7378640776699029, "avg_shots_per_game": 18.727272727272727, "save_pct_display": "73.8%"}, {"team": "Strängnäs IBK", "goalie": "Wiktor Åkerstedt (30 år)", "games_played": 10, "total_shots": 94, "total_saves": 76, "goals_against": 18, "final_save_pct": 0.8085106382978723, "avg_shots_per_game": 9.4, "save_pct_display": "80.9%"}, {"team": "Visby IBK", "goalie": "Andreas Egegård (28 år)", "games_played": 11, "total_shots": 17, "total_saves": 9, "goals_against": 8, "final_save_pct": 0.5294117647058824, "avg_shots_per_game": 1.5454545454545454, "save_pct_display": "52.9%"}, {"team": "Visby IBK", "goalie": "Rasmus Ekström (30 år)", "games_played": 11, "total_shots": 262, "total_saves": 208, "goals_against": 54, "final_save_pct": 0.7938931297709924, "avg_shots_per_game": 23.818181818181817, "save_pct_display": "79.4%"}, {"team": "Växjö IBK", "goalie": "Santtu Strandberg (34 år)", "games_played": 11, "total_shots": 197, "total_saves": 148, "goals_against": 49, "final_save_pct": 0.751269035532995, "avg_shots_per_game": 17.90909090909091, "save_pct_display": "75.1%"}, {"team": "Warberg IC", "goalie": "Nicholay Halvorsen (25 år)", "games_played": 11, "total_shots": 30, "total_saves": 24, "goals_against": 6, "final_save_pct": 0.8, "avg_shots_per_game": 2.727272727272727, "save_pct_display": "80.0%"}, {"team": "Warberg IC", "goalie": "Olle Jonsson (25 år)", "games_played": 11, "total_shots": 223, "total_saves": 170, "goals_against": 53, "final_save_pct": 0.7623318385650224, "avg_shots_per_game": 20.272727272727273, "save_pct_display": "76.2%"}], "goalie_to_team": {"Andreas Beckius (35 år)": "AIK IBF", "Jonathan Hjelm (27 år)": "AIK IBF", "Axel Adebrink (20 år)": "FBC Kalmarsund", "Pontus Zarins (27 år)": "FBC Kalmarsund", "David Andersson (23 år)": "Hovslätts IK", "Gustav Ringhagen (22 år)": "Hovslätts IK", "Philip Axelsson (24 år)": "Hovslätts IK", "Carl Bending-Sörling (31 år)": "IBF Falun", "Victor Frejd (25 år)": "IBF Falun", "Alessio Mura (21 år)": "Jönköpings IK", "Emil Ödman (23 år)": "Jönköpings IK", "Tomas Jurco (21 år)": "Linköping IBK", "Gustav Jansson (34 år)": "Mullsjö AIS", "Samuel Jönsson Dolke (20 år)": "Mullsjö AIS", "Jesper Ahrén (23 år)": "Nykvarns IBF", "Lucas Orrmo (37 år)": "Nykvarns IBF", "Jon Hedlund (34 år)": "Pixbo IBK", "Liam Juhlin (19 år)": "Pixbo IBK", "Emil Lindblom (23 år)": "Storvreta IBK", "Måns Parsjö (31 år)": "Storvreta IBK", "Oskar-Viking Tjärnberg (28 år)": "Strängnäs IBK", "Wiktor Åkerstedt (30 år)": "Strängnäs IBK", "Andreas Egegård (28 år)": "Visby IBK", "Rasmus Ekström (30 år)": "Visby IBK", "Santtu Strandberg (34 år)": "Växjö IBK", "Nicholay Halvorsen (25 år)": "Warberg IC", "Olle Jonsson (25 år)": "Warberg IC"}, "trace_goalies": ["Tomas Jurco (21 år)", "Emil Ödman (23 år)", "Alessio Mura (21 år)", "Wiktor Åkerstedt (30 år)", "Oskar-Viking Tjärnberg (28 år)", "Emil Lindblom (23 år)", "Måns Parsjö (31 år)", "David Andersson (23 år)", "Philip Axelsson (24 år)", "Gustav Jansson (34 år)", "Samuel Jönsson Dolke (20 år)", "Victor Frejd (25 år)", "Carl Bending-Sörling (31 år)", "Olle Jonsson (25 år)", "Nicholay Halvorsen (25 år)", "Andreas Beckius (35 år)", "Santtu Strandberg (34 år)", "Jesper Ahrén (23 år)", "Lucas Orrmo (37 år)", "Rasmus Ekström (30 år)", "Andreas Egegård (28 år)", "Jon Hedlund (34 år)", "Liam Juhlin (19 år)", "Axel Adebrink (20 år)", "Pontus Zarins (27 år)", "Jonathan Hjelm (27 år)", "Gustav Ringhagen (22 år)"], "team_options": ["AIK IBF", "FBC Kalmarsund", "Hovslätts IK", "IBF Falun", "Jönköpings IK", "Linköping IBK", "Mullsjö AIS", "Nykvarns IBF", "Pixbo IBK", "Storvreta IBK", "Strängnäs IBK", "Visby IBK", "Växjö IBK", "Warberg IC"], "dropped_goalies": ["Gustav Sundqvist (28 år)", "Kevin Bergman (20 år)", "Lauritz Brunborg (17 år)", "Martin Wallberg (20 år)", "Melvin Hildingsson (18 år)", "Noel Johansson (19 år)", "Oskar Bäckman (19 år)", "Pontus Bäckman (22 år)"], "stats": {"total_goalies": 27, "total_teams": 14, "date_range": "2000-01-01 → 2000-03-20", "zero_shot_goalies": 8}}, {"key": "secondary-league", "name": "Division 1 Västra Götaland", "figure": {"data": [{"customdata": [["IBK Göteborg", "1570521", 0, 0], ["IBK Göteborg", "1570527", 5, 7], ["IBK Göteborg", "1570533", 5, 7], ["IBK Göteborg", "1570539", 5, 7], ["IBK Göteborg", "1570545", 19, 29], ["IBK Göteborg", "1570553", 19, 29], ["IBK Göteborg", "1570557", 19, 29], ["IBK Göteborg", "1570564", 19, 29], ["IBK Göteborg", "1570570", 19, 29], ["IBK Göteborg", "1570575", 19, 29]], "hovertemplate": "Goalie=Martinus Martinsson (21 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Martinus Martinsson (21 år)", "line": {"color": "#636efa", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Martinus Martinsson (21 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-01T00:00:00", "2000-01-07T00:00:00", "2000-01-13T00:00:00", "2000-01-19T00:00:00", "2000-01-25T00:00:00", "2000-02-02T00:00:00", "2000-02-06T00:00:00", "2000-02-13T00:00:00", "2000-02-19T00:00:00", "2000-02-24T00:00:00"], "xaxis": "x", "y": [null, 0.7142857142857143, 0.7142857142857143, 0.7142857142857143, 0.6551724137931034, 0.6551724137931034, 0.6551724137931034, 0.6551724137931034, 0.6551724137931034, 0.6551724137931034], "yaxis": "y", "type": "scatter"}, {"customdata": [["IBK Göteborg", "1570521", 18, 23], ["IBK Göteborg", "1570527", 28, 40], ["IBK Göteborg", "1570533", 28, 40], ["IBK Göteborg", "1570539", 28, 40], ["IBK Göteborg", "1570545", 28, 40], ["IBK Göteborg", "1570553", 55, 76], ["IBK Göteborg", "1570557", 55, 76], ["IBK Göteborg", "1570564", 55, 76], ["IBK Göteborg", "1570570", 55, 76], ["IBK Göteborg", "1570575", 55, 76]], "hovertemplate": "Goalie=Oskar Adler (31 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Oskar Adler (31 år)", "line": {"color": "#EF553B", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Oskar Adler (31 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-01T00:00:00", "2000-01-07T00:00:00", "2000-01-13T00:00:00", "2000-01-19T00:00:00", "2000-01-25T00:00:00", "2000-02-02T00:00:00", "2000-02-06T00:00:00", "2000-02-13T00:00:00", "2000-02-19T00:00:00", "2000-02-24T00:00:00"], "xaxis": "x", "y": [0.782608695652174, 0.7, 0.7, 0.7, 0.7, 0.7236842105263158, 0.7236842105263158, 0.7236842105263158, 0.7236842105263158, 0.7236842105263158], "yaxis": "y", "type": "scatter"}, {"customdata": [["Fristads GoIF", "1570521", 0, 0], ["Fristads GoIF", "1570531", 0, 0], ["Fristads GoIF", "1570534", 0, 0], ["Fristads GoIF", "1570541", 0, 0], ["Fristads GoIF", "1570548", 0, 0], ["Fristads GoIF", "1570556", 0, 0], ["Fristads GoIF", "1570560", 0, 0], ["Fristads GoIF", "1570566", 0, 0], ["Fristads GoIF", "1570572", 0, 0], ["Fristads GoIF", "1570578", 5, 14]], "hovertemplate": "Goalie=Helge Wårfors (20 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Helge Wårfors (20 år)", "line": {"color": "#00cc96", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Helge Wårfors (20 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-01T00:00:00", "2000-01-11T00:00:00", "2000-01-14T00:00:00", "2000-01-21T00:00:00", "2000-01-28T00:00:00", "2000-02-05T00:00:00", "2000-02-09T00:00:00", "2000-02-15T00:00:00", "2000-02-21T00:00:00", "2000-02-27T00:00:00"], "xaxis": "x", "y": [null, null, null, null, null, null, null, null, null, 0.35714285714285715], "yaxis": "y", "type": "scatter"}, {"customdata": [["Fristads GoIF", "1570521", 15, 17], ["Fristads GoIF", "1570531", 55, 60], ["Fristads GoIF", "1570534", 55, 60], ["Fristads GoIF", "1570541", 70, 80], ["Fristads GoIF", "1570548", 70, 80], ["Fristads GoIF", "1570556", 104, 119], ["Fristads GoIF", "1570560", 120, 141], ["Fristads GoIF", "1570566", 120, 141], ["Fristads GoIF", "1570572", 140, 173], ["Fristads GoIF", "1570578", 153, 196]], "hovertemplate": "Goalie=Erik Christoffersson (22 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Erik Christoffersson (22 år)", "line": {"color": "#ab63fa", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Erik Christoffersson (22 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-01T00:00:00", "2000-01-11T00:00:00", "2000-01-14T00:00:00", "2000-01-21T00:00:00", "2000-01-28T00:00:00", "2000-02-05T00:00:00", "2000-02-09T00:00:00", "2000-02-15T00:00:00", "2000-02-21T00:00:00", "2000-02-27T00:00:00"], "xaxis": "x", "y": [0.8823529411764706, 0.9166666666666666, 0.9166666666666666, 0.875, 0.875, 0.8739495798319328, 0.851063829787234, 0.851063829787234, 0.8092485549132948, 0.7806122448979592], "yaxis": "y", "type": "scatter"}, {"customdata": [["IBK Kungälv", "1570522", 0, 0], ["IBK Kungälv", "1570528", 0, 0], ["IBK Kungälv", "1570540", 0, 0], ["IBK Kungälv", "1570546", 26, 35], ["IBK Kungälv", "1570551", 26, 35], ["IBK Kungälv", "1570558", 26, 35], ["IBK Kungälv", "1570563", 26, 35], ["IBK Kungälv", "1570571", 26, 35], ["IBK Kungälv", "1570575", 26, 35]], "hovertemplate": "Goalie=Johan Svensson (30 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Johan Svensson (30 år)", "line": {"color": "#FFA15A", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Johan Svensson (30 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-02T00:00:00", "2000-01-08T00:00:00", "2000-01-20T00:00:00", "2000-01-26T00:00:00", "2000-01-31T00:00:00", "2000-02-07T00:00:00", "2000-02-12T00:00:00", "2000-02-20T00:00:00", "2000-02-24T00:00:00"], "xaxis": "x", "y": [null, null, null, 0.7428571428571429, 0.7428571428571429, 0.7428571428571429, 0.7428571428571429, 0.7428571428571429, 0.7428571428571429], "yaxis": "y", "type": "scatter"}, {"customdata": [["IBK Kungälv", "1570522", 0, 0], ["IBK Kungälv", "1570528", 33, 44], ["IBK Kungälv", "1570534", 33, 44], ["IBK Kungälv", "1570540", 49, 70], ["IBK Kungälv", "1570546", 49, 70], ["IBK Kungälv", "1570551", 49, 70], ["IBK Kungälv", "1570558", 49, 70], ["IBK Kungälv", "1570563", 49, 70], ["IBK Kungälv", "1570571", 49, 70], ["IBK Kungälv", "1570575", 49, 70]], "hovertemplate": "Goalie=Johan Ljungberg (29 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Johan Ljungberg (29 år)", "line": {"color": "#19d3f3", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Johan Ljungberg (29 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-02T00:00:00", "2000-01-08T00:00:00", "2000-01-14T00:00:00", "2000-01-20T00:00:00", "2000-01-26T00:00:00", "2000-01-31T00:00:00", "2000-02-07T00:00:00", "2000-02-12T00:00:00", "2000-02-20T00:00:00", "2000-02-24T00:00:00"], "xaxis": "x", "y": [null, 0.75, 0.75, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7], "yaxis": "y", "type": "scatter"}, {"customdata": [["Fagerhult Habo IBK", "1570522", 0, 0], ["Fagerhult Habo IBK", "1570532", 6, 9], ["Fagerhult Habo IBK", "1570533", 6, 9], ["Fagerhult Habo IBK", "1570542", 6, 9], ["Fagerhult Habo IBK", "1570547", 15, 19], ["Fagerhult Habo IBK", "1570555", 15, 19], ["Fagerhult Habo IBK", "1570561", 15, 19], ["Fagerhult Habo IBK", "1570567", 34, 42], ["Fagerhult Habo IBK", "1570574", 51, 63], ["Fagerhult Habo IBK", "1570578", 51, 63]], "hovertemplate": "Goalie=Alvin Eckert (18 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Alvin Eckert (18 år)", "line": {"color": "#FF6692", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Alvin Eckert (18 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-02T00:00:00", "2000-01-12T00:00:00", "2000-01-13T00:00:00", "2000-01-22T00:00:00", "2000-01-27T00:00:00", "2000-02-04T00:00:00", "2000-02-10T00:00:00", "2000-02-16T00:00:00", "2000-02-23T00:00:00", "2000-02-27T00:00:00"], "xaxis": "x", "y": [null, 0.6666666666666666, 0.6666666666666666, 0.6666666666666666, 0.7894736842105263, 0.7894736842105263, 0.7894736842105263, 0.8095238095238095, 0.8095238095238095, 0.8095238095238095], "yaxis": "y", "type": "scatter"}, {"customdata": [["Fagerhult Habo IBK", "1570522", 0, 0], ["Fagerhult Habo IBK", "1570532", 0, 0], ["Fagerhult Habo IBK", "1570533", 0, 0], ["Fagerhult Habo IBK", "1570542", 8, 13], ["Fagerhult Habo IBK", "1570547", 8, 13], ["Fagerhult Habo IBK", "1570555", 8, 13], ["Fagerhult Habo IBK", "1570561", 16, 26], ["Fagerhult Habo IBK", "1570567", 16, 26], ["Fagerhult Habo IBK", "1570574", 16, 26], ["Fagerhult Habo IBK", "1570578", 29, 40]], "hovertemplate": "Goalie=Johan Ringqvist (27 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Johan Ringqvist (27 år)", "line": {"color": "#B6E880", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Johan Ringqvist (27 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-02T00:00:00", "2000-01-12T00:00:00", "2000-01-13T00:00:00", "2000-01-22T00:00:00", "2000-01-27T00:00:00", "2000-02-04T00:00:00", "2000-02-10T00:00:00", "2000-02-16T00:00:00", "2000-02-23T00:00:00", "2000-02-27T00:00:00"], "xaxis": "x", "y": [null, null, null, 0.6153846153846154, 0.6153846153846154, 0.6153846153846154, 0.6153846153846154, 0.6153846153846154, 0.6153846153846154, 0.725], "yaxis": "y", "type": "scatter"}, {"customdata": [["Särö IBK", "1570523", 0, 0], ["Särö IBK", "1570529", 0, 0], ["Särö IBK", "1570535", 0, 0], ["Särö IBK", "1570541", 24, 32], ["Särö IBK", "1570547", 37, 52], ["Särö IBK", "1570552", 37, 52], ["Särö IBK", "1570557", 37, 52], ["Särö IBK", "1570565", 37, 52], ["Särö IBK", "1570569", 37, 52]], "hovertemplate": "Goalie=Simon Kure (22 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Simon Kure (22 år)", "line": {"color": "#FF97FF", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Simon Kure (22 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-03T00:00:00", "2000-01-09T00:00:00", "2000-01-15T00:00:00", "2000-01-21T00:00:00", "2000-01-27T00:00:00", "2000-02-01T00:00:00", "2000-02-06T00:00:00", "2000-02-14T00:00:00", "2000-02-18T00:00:00"], "xaxis": "x", "y": [null, null, null, 0.75, 0.7115384615384616, 0.7115384615384616, 0.7115384615384616, 0.7115384615384616, 0.7115384615384616], "yaxis": "y", "type": "scatter"}, {"customdata": [["Pixbo IBF", "1570523", 0, 0], ["Pixbo IBF", "1570527", 21, 26], ["Pixbo IBF", "1570536", 43, 52], ["Pixbo IBF", "1570543", 64, 78], ["Pixbo IBF", "1570550", 64, 78], ["Pixbo IBF", "1570551", 64, 78], ["Pixbo IBF", "1570560", 83, 104], ["Pixbo IBF", "1570568", 93, 122], ["Pixbo IBF", "1570573", 117, 155], ["Pixbo IBF", "1570579", 117, 155]], "hovertemplate": "Goalie=Elmer Arne (18 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Elmer Arne (18 år)", "line": {"color": "#FECB52", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Elmer Arne (18 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-03T00:00:00", "2000-01-07T00:00:00", "2000-01-16T00:00:00", "2000-01-23T00:00:00", "2000-01-30T00:00:00", "2000-01-31T00:00:00", "2000-02-09T00:00:00", "2000-02-17T00:00:00", "2000-02-22T00:00:00", "2000-02-28T00:00:00"], "xaxis": "x", "y": [null, 0.8076923076923077, 0.8269230769230769, 0.8205128205128205, 0.8205128205128205, 0.8205128205128205, 0.7980769230769231, 0.7622950819672131, 0.7548387096774194, 0.7548387096774194], "yaxis": "y", "type": "scatter"}, {"customdata": [["FBC Partille", "1570524", 11, 14], ["FBC Partille", "1570530", 29, 36], ["FBC Partille", "1570536", 48, 61], ["FBC Partille", "1570542", 59, 78], ["FBC Partille", "1570548", 59, 78], ["FBC Partille", "1570554", 77, 99], ["FBC Partille", "1570559", 77, 99], ["FBC Partille", "1570563", 77, 99], ["FBC Partille", "1570570", 77, 99]], "hovertemplate": "Goalie=Robin Pagoldh (25 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Robin Pagoldh (25 år)", "line": {"color": "#636efa", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Robin Pagoldh (25 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-04T00:00:00", "2000-01-10T00:00:00", "2000-01-16T00:00:00", "2000-01-22T00:00:00", "2000-01-28T00:00:00", "2000-02-03T00:00:00", "2000-02-08T00:00:00", "2000-02-12T00:00:00", "2000-02-19T00:00:00"], "xaxis": "x", "y": [0.7857142857142857, 0.8055555555555556, 0.7868852459016393, 0.7564102564102564, 0.7564102564102564, 0.7777777777777778, 0.7777777777777778, 0.7777777777777778, 0.7777777777777778], "yaxis": "y", "type": "scatter"}, {"customdata": [["IBK Lidköping", "1570524", 21, 27], ["IBK Lidköping", "1570528", 21, 27], ["IBK Lidköping", "1570535", 21, 27], ["IBK Lidköping", "1570544", 21, 27], ["IBK Lidköping", "1570549", 45, 56], ["IBK Lidköping", "1570553", 45, 56], ["IBK Lidköping", "1570562", 45, 56], ["IBK Lidköping", "1570567", 45, 56], ["IBK Lidköping", "1570572", 45, 56], ["IBK Lidköping", "1570579", 45, 56], ["IBK Lidköping", "1570586", 45, 56]], "hovertemplate": "Goalie=Liam Eriksson (17 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Liam Eriksson (17 år)", "line": {"color": "#EF553B", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Liam Eriksson (17 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-04T00:00:00", "2000-01-08T00:00:00", "2000-01-15T00:00:00", "2000-01-24T00:00:00", "2000-01-29T00:00:00", "2000-02-02T00:00:00", "2000-02-11T00:00:00", "2000-02-16T00:00:00", "2000-02-21T00:00:00", "2000-02-28T00:00:00", "2000-03-06T00:00:00"], "xaxis": "x", "y": [0.7777777777777778, 0.7777777777777778, 0.7777777777777778, 0.7777777777777778, 0.8035714285714286, 0.8035714285714286, 0.8035714285714286, 0.8035714285714286, 0.8035714285714286, 0.8035714285714286, 0.8035714285714286], "yaxis": "y", "type": "scatter"}, {"customdata": [["IBF Backadalen", "1570525", 24, 29], ["IBF Backadalen", "1570531", 42, 56], ["IBF Backadalen", "1570543", 61, 81], ["IBF Backadalen", "1570558", 61, 81], ["IBF Backadalen", "1570564", 61, 81], ["IBF Backadalen", "1570569", 61, 81], ["IBF Backadalen", "1570577", 77, 102]], "hovertemplate": "Goalie=Oscar Larsson (21 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Oscar Larsson (21 år)", "line": {"color": "#00cc96", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Oscar Larsson (21 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-05T00:00:00", "2000-01-11T00:00:00", "2000-01-23T00:00:00", "2000-02-07T00:00:00", "2000-02-13T00:00:00", "2000-02-18T00:00:00", "2000-02-26T00:00:00"], "xaxis": "x", "y": [0.8275862068965517, 0.75, 0.7530864197530864, 0.7530864197530864, 0.7530864197530864, 0.7530864197530864, 0.7549019607843137], "yaxis": "y", "type": "scatter"}, {"customdata": [["IBF Backadalen", "1570525", 0, 0], ["IBF Backadalen", "1570531", 0, 0], ["IBF Backadalen", "1570537", 0, 0], ["IBF Backadalen", "1570543", 10, 14], ["IBF Backadalen", "1570549", 10, 14], ["IBF Backadalen", "1570555", 10, 14]], "hovertemplate": "Goalie=Kasper Landström (20 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Kasper Landström (20 år)", "line": {"color": "#ab63fa", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Kasper Landström (20 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-05T00:00:00", "2000-01-11T00:00:00", "2000-01-17T00:00:00", "2000-01-23T00:00:00", "2000-01-29T00:00:00", "2000-02-04T00:00:00"], "xaxis": "x", "y": [null, null, null, 0.7142857142857143, 0.7142857142857143, 0.7142857142857143], "yaxis": "y", "type": "scatter"}, {"customdata": [["Mullsjö AIS Utveckling", "1570525", 11, 19], ["Mullsjö AIS Utveckling", "1570539", 11, 19], ["Mullsjö AIS Utveckling", "1570566", 11, 19]], "hovertemplate": "Goalie=David Vik (29 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "David Vik (29 år)", "line": {"color": "#FFA15A", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "David Vik (29 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-05T00:00:00", "2000-01-19T00:00:00", "2000-02-15T00:00:00"], "xaxis": "x", "y": [0.5789473684210527, 0.5789473684210527, 0.5789473684210527], "yaxis": "y", "type": "scatter"}, {"customdata": [["Mullsjö AIS Utveckling", "1570525", 0, 0], ["Mullsjö AIS Utveckling", "1570529", 0, 0], ["Mullsjö AIS Utveckling", "1570538", 0, 0], ["Mullsjö AIS Utveckling", "1570539", 16, 22], ["Mullsjö AIS Utveckling", "1570546", 38, 52], ["Mullsjö AIS Utveckling", "1570554", 38, 52], ["Mullsjö AIS Utveckling", "1570561", 59, 81], ["Mullsjö AIS Utveckling", "1570566", 59, 81], ["Mullsjö AIS Utveckling", "1570573", 71, 96], ["Mullsjö AIS Utveckling", "1570580", 84, 115]], "hovertemplate": "Goalie=Elliot Järn (19 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Elliot Järn (19 år)", "line": {"color": "#19d3f3", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Elliot Järn (19 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-05T00:00:00", "2000-01-09T00:00:00", "2000-01-18T00:00:00", "2000-01-19T00:00:00", "2000-01-26T00:00:00", "2000-02-03T00:00:00", "2000-02-10T00:00:00", "2000-02-15T00:00:00", "2000-02-22T00:00:00", "2000-02-29T00:00:00"], "xaxis": "x", "y": [null, null, null, 0.7272727272727273, 0.7307692307692307, 0.7307692307692307, 0.7283950617283951, 0.7283950617283951, 0.7395833333333334, 0.7304347826086957], "yaxis": "y", "type": "scatter"}, {"customdata": [["Floda IBK", "1570526", 18, 20], ["Floda IBK", "1570532", 36, 46], ["Floda IBK", "1570538", 36, 46], ["Floda IBK", "1570544", 36, 46], ["Floda IBK", "1570556", 36, 46], ["Floda IBK", "1570565", 36, 46], ["Floda IBK", "1570571", 36, 46], ["Floda IBK", "1570577", 36, 46]], "hovertemplate": "Goalie=Phoenix Wigilius (19 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Phoenix Wigilius (19 år)", "line": {"color": "#FF6692", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Phoenix Wigilius (19 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-06T00:00:00", "2000-01-12T00:00:00", "2000-01-18T00:00:00", "2000-01-24T00:00:00", "2000-02-05T00:00:00", "2000-02-14T00:00:00", "2000-02-20T00:00:00", "2000-02-26T00:00:00"], "xaxis": "x", "y": [0.9, 0.782608695652174, 0.782608695652174, 0.782608695652174, 0.782608695652174, 0.782608695652174, 0.782608695652174, 0.782608695652174], "yaxis": "y", "type": "scatter"}, {"customdata": [["Floda IBK", "1570526", 0, 0], ["Floda IBK", "1570544", 29, 37], ["Floda IBK", "1570550", 29, 37], ["Floda IBK", "1570559", 29, 37], ["Floda IBK", "1570565", 29, 37]], "hovertemplate": "Goalie=Joel Andersson (18 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Joel Andersson (18 år)", "line": {"color": "#B6E880", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Joel Andersson (18 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-06T00:00:00", "2000-01-24T00:00:00", "2000-01-30T00:00:00", "2000-02-08T00:00:00", "2000-02-14T00:00:00"], "xaxis": "x", "y": [null, 0.7837837837837838, 0.7837837837837838, 0.7837837837837838, 0.7837837837837838], "yaxis": "y", "type": "scatter"}, {"customdata": [["IBK Alingsås", "1570526", 17, 22], ["IBK Alingsås", "1570530", 19, 30], ["IBK Alingsås", "1570537", 19, 30], ["IBK Alingsås", "1570540", 36, 50], ["IBK Alingsås", "1570545", 36, 50], ["IBK Alingsås", "1570552", 36, 50], ["IBK Alingsås", "1570562", 36, 50], ["IBK Alingsås", "1570568", 36, 50], ["IBK Alingsås", "1570574", 56, 78], ["IBK Alingsås", "1570580", 56, 78]], "hovertemplate": "Goalie=Vincent Sohlström (32 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Vincent Sohlström (32 år)", "line": {"color": "#FF97FF", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Vincent Sohlström (32 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-06T00:00:00", "2000-01-10T00:00:00", "2000-01-17T00:00:00", "2000-01-20T00:00:00", "2000-01-25T00:00:00", "2000-02-01T00:00:00", "2000-02-11T00:00:00", "2000-02-17T00:00:00", "2000-02-23T00:00:00", "2000-02-29T00:00:00"], "xaxis": "x", "y": [0.7727272727272727, 0.6333333333333333, 0.6333333333333333, 0.72, 0.72, 0.72, 0.72, 0.72, 0.717948717948718, 0.717948717948718], "yaxis": "y", "type": "scatter"}, {"customdata": [["IBK Alingsås", "1570526", 0, 0], ["IBK Alingsås", "1570530", 4, 10], ["IBK Alingsås", "1570537", 17, 32], ["IBK Alingsås", "1570540", 17, 32], ["IBK Alingsås", "1570545", 17, 32], ["IBK Alingsås", "1570552", 17, 32], ["IBK Alingsås", "1570562", 17, 32], ["IBK Alingsås", "1570568", 35, 54], ["IBK Alingsås", "1570574", 35, 54], ["IBK Alingsås", "1570580", 47, 70]], "hovertemplate": "Goalie=Albin Flöjner (21 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Albin Flöjner (21 år)", "line": {"color": "#FECB52", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Albin Flöjner (21 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-06T00:00:00", "2000-01-10T00:00:00", "2000-01-17T00:00:00", "2000-01-20T00:00:00", "2000-01-25T00:00:00", "2000-02-01T00:00:00", "2000-02-11T00:00:00", "2000-02-17T00:00:00", "2000-02-23T00:00:00", "2000-02-29T00:00:00"], "xaxis": "x", "y": [null, 0.4, 0.53125, 0.53125, 0.53125, 0.53125, 0.53125, 0.6481481481481481, 0.6481481481481481, 0.6714285714285714], "yaxis": "y", "type": "scatter"}, {"customdata": [["IBK Lidköping", "1570528", 31, 38], ["IBK Lidköping", "1570535", 31, 38], ["IBK Lidköping", "1570544", 48, 60], ["IBK Lidköping", "1570549", 48, 60], ["IBK Lidköping", "1570553", 69, 87], ["IBK Lidköping", "1570562", 69, 87], ["IBK Lidköping", "1570567", 82, 107], ["IBK Lidköping", "1570572", 107, 139], ["IBK Lidköping", "1570579", 107, 139], ["IBK Lidköping", "1570586", 107, 139]], "hovertemplate": "Goalie=Emil Lundberg (25 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Emil Lundberg (25 år)", "line": {"color": "#636efa", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Emil Lundberg (25 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-08T00:00:00", "2000-01-15T00:00:00", "2000-01-24T00:00:00", "2000-01-29T00:00:00", "2000-02-02T00:00:00", "2000-02-11T00:00:00", "2000-02-16T00:00:00", "2000-02-21T00:00:00", "2000-02-28T00:00:00", "2000-03-06T00:00:00"], "xaxis": "x", "y": [0.8157894736842105, 0.8157894736842105, 0.8, 0.8, 0.7931034482758621, 0.7931034482758621, 0.7663551401869159, 0.7697841726618705, 0.7697841726618705, 0.7697841726618705], "yaxis": "y", "type": "scatter"}, {"customdata": [["Mullsjö AIS Utveckling", "1570529", 0, 0], ["Mullsjö AIS Utveckling", "1570538", 0, 0], ["Mullsjö AIS Utveckling", "1570546", 0, 0], ["Mullsjö AIS Utveckling", "1570554", 14, 20], ["Mullsjö AIS Utveckling", "1570561", 14, 20], ["Mullsjö AIS Utveckling", "1570573", 14, 20], ["Mullsjö AIS Utveckling", "1570580", 14, 20]], "hovertemplate": "Goalie=Isak Dorell (22 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Isak Dorell (22 år)", "line": {"color": "#EF553B", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Isak Dorell (22 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-09T00:00:00", "2000-01-18T00:00:00", "2000-01-26T00:00:00", "2000-02-03T00:00:00", "2000-02-10T00:00:00", "2000-02-22T00:00:00", "2000-02-29T00:00:00"], "xaxis": "x", "y": [null, null, null, 0.7, 0.7, 0.7, 0.7], "yaxis": "y", "type": "scatter"}, {"customdata": [["IBF Backadalen", "1570537", 35, 43], ["IBF Backadalen", "1570549", 89, 97], ["IBF Backadalen", "1570555", 89, 97], ["IBF Backadalen", "1570558", 89, 97], ["IBF Backadalen", "1570564", 89, 97], ["IBF Backadalen", "1570569", 89, 97], ["IBF Backadalen", "1570577", 89, 97]], "hovertemplate": "Goalie=Lukas Källström (25 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Lukas Källström (25 år)", "line": {"color": "#00cc96", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Lukas Källström (25 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-17T00:00:00", "2000-01-29T00:00:00", "2000-02-04T00:00:00", "2000-02-07T00:00:00", "2000-02-13T00:00:00", "2000-02-18T00:00:00", "2000-02-26T00:00:00"], "xaxis": "x", "y": [0.813953488372093, 0.9175257731958762, 0.9175257731958762, 0.9175257731958762, 0.9175257731958762, 0.9175257731958762, 0.9175257731958762], "yaxis": "y", "type": "scatter"}, {"customdata": [["Floda IBK", "1570538", 0, 0], ["Floda IBK", "1570550", 0, 0], ["Floda IBK", "1570556", 20, 23], ["Floda IBK", "1570559", 20, 23], ["Floda IBK", "1570571", 20, 23], ["Floda IBK", "1570577", 34, 43]], "hovertemplate": "Goalie=Kalle Lundgren (25 år)<br>Date=%{x}<br>Cumulative Save %=%{y:.1%}<br>team=%{customdata[0]}<br>game_id=%{customdata[1]}<br>cumulative_saves=%{customdata[2]}<br>cumulative_shots=%{customdata[3]}<extra></extra>", "legendgroup": "Kalle Lundgren (25 år)", "line": {"color": "#ab63fa", "dash": "solid"}, "marker": {"symbol": "circle"}, "mode": "lines+markers", "name": "Kalle Lundgren (25 år)", "orientation": "v", "showlegend": true, "x": ["2000-01-18T00:00:00", "2000-01-30T00:00:00", "2000-02-05T00:00:00", "2000-02-08T00:00:00", "2000-02-20T00:00:00", "2000-02-26T00:00:00"], "xaxis": "x", "y": [null, null, 0.8695652173913043, 0.8695652173913043, 0.8695652173913043, 0.7906976744186046], "yaxis": "y", "type": "scatter"}], "layout": {"template": {"data": {"histogram2dcontour": [{"type": "histogram2dcontour", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "choropleth": [{"type": "choropleth", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "histogram2d": [{"type": "histogram2d", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "heatmap": [{"type": "heatmap", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "heatmapgl": [{"type": "heatmapgl", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "contourcarpet": [{"type": "contourcarpet", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "contour": [{"type": "contour", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "surface": [{"type": "surface", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "mesh3d": [{"type": "mesh3d", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "scatter": [{"fillpattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}, "type": "scatter"}], "parcoords": [{"type": "parcoords", "line": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterpolargl": [{"type": "scatterpolargl", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "bar": [{"error_x": {"color": "#2a3f5f"}, "error_y": {"color": "#2a3f5f"}, "marker": {"line": {"color": "#E5ECF6", "width": 0.5}, "pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "bar"}], "scattergeo": [{"type": "scattergeo", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterpolar": [{"type": "scatterpolar", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "histogram": [{"marker": {"pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "histogram"}], "scattergl": [{"type": "scattergl", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatter3d": [{"type": "scatter3d", "line": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scattermapbox": [{"type": "scattermapbox", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterternary": [{"type": "scatterternary", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scattercarpet": [{"type": "scattercarpet", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "carpet": [{"aaxis": {"endlinecolor": "#2a3f5f", "gridcolor": "white", "linecolor": "white", "minorgridcolor": "white", "startlinecolor": "#2a3f5f"}, "baxis": {"endlinecolor": "#2a3f5f", "gridcolor": "white", "linecolor": "white", "minorgridcolor": "white", "startlinecolor": "#2a3f5f"}, "type": "carpet"}], "table": [{"cells": {"fill": {"color": "#EBF0F8"}, "line": {"color": "white"}}, "header": {"fill": {"color": "#C8D4E3"}, "line": {"color": "white"}}, "type": "table"}], "barpolar": [{"marker": {"line": {"color": "#E5ECF6", "width": 0.5}, "pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "barpolar"}], "pie": [{"automargin": true, "type": "pie"}]}, "layout": {"autotypenumbers": "strict", "colorway": ["#636efa", "#EF553B", "#00cc96", "#ab63fa", "#FFA15A", "#19d3f3", "#FF6692", "#B6E880", "#FF97FF", "#FECB52"], "font": {"color": "#2a3f5f"}, "hovermode": "closest", "hoverlabel": {"align": "left"}, "paper_bgcolor": "white", "plot_bgcolor": "#E5ECF6", "polar": {"bgcolor": "#E5ECF6", "angularaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "radialaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}}, "ternary": {"bgcolor": "#E5ECF6", "aaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "baxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "caxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}}, "coloraxis": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "colorscale": {"sequential": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]], "sequentialminus": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]], "diverging": [[0, "#8e0152"], [0.1, "#c51b7d"], [0.2, "#de77ae"], [0.3, "#f1b6da"], [0.4, "#fde0ef"], [0.5, "#f7f7f7"], [0.6, "#e6f5d0"], [0.7, "#b8e186"], [0.8, "#7fbc41"], [0.9, "#4d9221"], [1, "#276419"]]}, "xaxis": {"gridcolor": "white", "linecolor": "white", "ticks": "", "title": {"standoff": 15}, "zerolinecolor": "white", "automargin": true, "zerolinewidth": 2}, "yaxis": {"gridcolor": "white", "linecolor": "white", "ticks": "", "title": {"standoff": 15}, "zerolinecolor": "white", "automargin": true, "zerolinewidth": 2}, "scene": {"xaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}, "yaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}, "zaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}}, "shapedefaults": {"line": {"color": "#2a3f5f"}}, "annotationdefaults": {"arrowcolor": "#2a3f5f", "arrowhead": 0, "arrowwidth": 1}, "geo": {"bgcolor": "white", "landcolor": "#E5ECF6", "subunitcolor": "white", "showland": true, "showlakes": true, "lakecolor": "white"}, "title": {"x": 0.05}, "mapbox": {"style": "light"}}}, "xaxis": {"anchor": "y", "domain": [0.0, 1.0], "title": {"text": "Date"}, "rangeslider": {"visible": true}}, "yaxis": {"anchor": "x", "domain": [0.0, 1.0], "title": {"text": "Cumulative Save %"}, "tickformat": ".0%", "rangemode": "tozero"}, "legend": {"title": {"text": "Goalie"}, "tracegroupgap": 0}, "margin": {"t": 60}, "title": {"text": "Goalie cumulative save percentage over time"}, "hovermode": "x unified", "annotations": [{"align": "right", "bgcolor": "rgba(0,0,0,0.4)", "bordercolor": "rgba(255,255,255,0.2)", "borderpad": 6, "borderwidth": 1, "font": {"size": 12}, "showarrow": false, "text": "<b>Filtered (0 shots):</b><br>• Adrian Moghaddam (17 år)<br>• Albin Lidefelt (16 år)<br>• Anton Fogelberg (15 år)<br>• Hampus Eriksson (21 år)<br>• Isaac Evans (18 år)<br>• Kai Fridolf (17 år)<br>• Lauritz Brunborg (17 år)<br>• Samuel Löwenmo (17 år)", "x": 1.0, "xanchor": "right", "xref": "paper", "y": 1.0, "yanchor": "top", "yref": "paper"}]}}, "summary_records": [{"team": "FBC Partille", "goalie": "Robin Pagoldh (25 år)", "games_played": 9, "total_shots": 99, "total_saves": 77, "goals_against": 22, "final_save_pct": 0.7777777777777778, "avg_shots_per_game": 11.0, "save_pct_display": "77.8%"}, {"team": "Fagerhult Habo IBK", "goalie": "Alvin Eckert (18 år)", "games_played": 10, "total_shots": 63, "total_saves": 51, "goals_against": 12, "final_save_pct": 0.8095238095238095, "avg_shots_per_game": 6.3, "save_pct_display": "81.0%"}, {"team": "Fagerhult Habo IBK", "goalie": "Johan Ringqvist (27 år)", "games_played": 10, "total_shots": 40, "total_saves": 29, "goals_against": 11, "final_save_pct": 0.725, "avg_shots_per_game": 4.0, "save_pct_display": "72.5%"}, {"team": "Floda IBK", "goalie": "Joel Andersson (18 år)", "games_played": 5, "total_shots": 37, "total_saves": 29, "goals_against": 8, "final_save_pct": 0.7837837837837838, "avg_shots_per_game": 7.4, "save_pct_display": "78.4%"}, {"team": "Floda IBK", "goalie": "Kalle Lundgren (25 år)", "games_played": 6, "total_shots": 43, "total_saves": 34, "goals_against": 9, "final_save_pct": 0.7906976744186046, "avg_shots_per_game": 7.166666666666667, "save_pct_display": "79.1%"}, {"team": "Floda IBK", "goalie": "Phoenix Wigilius (19 år)", "games_played": 8, "total_shots": 46, "total_saves": 36, "goals_against": 10, "final_save_pct": 0.782608695652174, "avg_shots_per_game": 5.75, "save_pct_display": "78.3%"}, {"team": "Fristads GoIF", "goalie": "Erik Christoffersson (22 år)", "games_played": 10, "total_shots": 196, "total_saves": 153, "goals_against": 43, "final_save_pct": 0.7806122448979592, "avg_shots_per_game": 19.6, "save_pct_display": "78.1%"}, {"team": "Fristads GoIF", "goalie": "Helge Wårfors (20 år)", "games_played": 10, "total_shots": 14, "total_saves": 5, "goals_against": 9, "final_save_pct": 0.35714285714285715, "avg_shots_per_game": 1.4, "save_pct_display": "35.7%"}, {"team": "IBF Backadalen", "goalie": "Kasper Landström (20 år)", "games_played": 6, "total_shots": 14, "total_saves": 10, "goals_against": 4, "final_save_pct": 0.7142857142857143, "avg_shots_per_game": 2.3333333333333335, "save_pct_display": "71.4%"}, {"team": "IBF Backadalen", "goalie": "Lukas Källström (25 år)", "games_played": 7, "total_shots": 97, "total_saves": 89, "goals_against": 8, "final_save_pct": 0.9175257731958762, "avg_shots_per_game": 13.857142857142858, "save_pct_display": "91.8%"}, {"team": "IBF Backadalen", "goalie": "Oscar Larsson (21 år)", "games_played": 7, "total_shots": 102, "total_saves": 77, "goals_against": 25, "final_save_pct": 0.7549019607843137, "avg_shots_per_game": 14.571428571428571, "save_pct_display": "75.5%"}, {"team": "IBK Alingsås", "goalie": "Albin Flöjner (21 år)", "games_played": 10, "total_shots": 70, "total_saves": 47, "goals_against": 23, "final_save_pct": 0.6714285714285714, "avg_shots_per_game": 7.0, "save_pct_display": "67.1%"}, {"team": "IBK Alingsås", "goalie": "Vincent Sohlström (32 år)", "games_played": 10, "total_shots": 78, "total_saves": 56, "goals_against": 22, "final_save_pct": 0.717948717948718, "avg_shots_per_game": 7.8, "save_pct_display": "71.8%"}, {"team": "IBK Göteborg", "goalie": "Martinus Martinsson (21 år)", "games_played": 10, "total_shots": 29, "total_saves": 19, "goals_against": 10, "final_save_pct": 0.6551724137931034, "avg_shots_per_game": 2.9, "save_pct_display": "65.5%"}, {"team": "IBK Göteborg", "goalie": "Oskar Adler (31 år)", "games_played": 10, "total_shots": 76, "total_saves": 55, "goals_against": 21, "final_save_pct": 0.7236842105263158, "avg_shots_per_game": 7.6, "save_pct_display": "72.4%"}, {"team": "IBK Kungälv", "goalie": "Johan Ljungberg (29 år)", "games_played": 10, "total_shots": 70, "total_saves": 49, "goals_against": 21, "final_save_pct": 0.7, "avg_shots_per_game": 7.0, "save_pct_display": "70.0%"}, {"team": "IBK Kungälv", "goalie": "Johan Svensson (30 år)", "games_played": 9, "total_shots": 35, "total_saves": 26, "goals_against": 9, "final_save_pct": 0.7428571428571429, "avg_shots_per_game": 3.888888888888889, "save_pct_display": "74.3%"}, {"team": "IBK Lidköping", "goalie": "Emil Lundberg (25 år)", "games_played": 10, "total_shots": 139, "total_saves": 107, "goals_against": 32, "final_save_pct": 0.7697841726618705, "avg_shots_per_game": 13.9, "save_pct_display": "77.0%"}, {"team": "IBK Lidköping", "goalie": "Liam Eriksson (17 år)", "games_played": 11, "total_shots": 56, "total_saves": 45, "goals_against": 11, "final_save_pct": 0.8035714285714286, "avg_shots_per_game": 5.090909090909091, "save_pct_display": "80.4%"}, {"team": "Mullsjö AIS Utveckling", "goalie": "David Vik (29 år)", "games_played": 3, "total_shots": 19, "total_saves": 11, "goals_against": 8, "final_save_pct": 0.5789473684210527, "avg_shots_per_game": 6.333333333333333, "save_pct_display": "57.9%"}, {"team": "Mullsjö AIS Utveckling", "goalie": "Elliot Järn (19 år)", "games_played": 10, "total_shots": 115, "total_saves": 84, "goals_against": 31, "final_save_pct": 0.7304347826086957, "avg_shots_per_game": 11.5, "save_pct_display": "73.0%"}, {"team": "Mullsjö AIS Utveckling", "goalie": "Isak Dorell (22 år)", "games_played": 7, "total_shots": 20, "total_saves": 14, "goals_against": 6, "final_save_pct": 0.7, "avg_shots_per_game": 2.857142857142857, "save_pct_display": "70.0%"}, {"team": "Pixbo IBF", "goalie": "Elmer Arne (18 år)", "games_played": 10, "total_shots": 155, "total_saves": 117, "goals_against": 38, "final_save_pct": 0.7548387096774194, "avg_shots_per_game": 15.5, "save_pct_display": "75.5%"}, {"team": "Särö IBK", "goalie": "Simon Kure (22 år)", "games_played": 9, "total_shots": 52, "total_saves": 37, "goals_against": 15, "final_save_pct": 0.7115384615384616, "avg_shots_per_game": 5.777777777777778, "save_pct_display": "71.2%"}], "goalie_to_team": {"Robin Pagoldh (25 år)": "FBC Partille", "Alvin Eckert (18 år)": "Fagerhult Habo IBK", "Johan Ringqvist (27 år)": "Fagerhult Habo IBK", "Joel Andersson (18 år)": "Floda IBK", "Kalle Lundgren (25 år)": "Floda IBK", "Phoenix Wigilius (19 år)": "Floda IBK", "Erik Christoffersson (22 år)": "Fristads GoIF", "Helge Wårfors (20 år)": "Fristads GoIF", "Kasper Landström (20 år)": "IBF Backadalen", "Lukas Källström (25 år)": "IBF Backadalen", "Oscar Larsson (21 år)": "IBF Backadalen", "Albin Flöjner (21 år)": "IBK Alingsås", "Vincent Sohlström (32 år)": "IBK Alingsås", "Martinus Martinsson (21 år)": "IBK Göteborg", "Oskar Adler (31 år)": "IBK Göteborg", "Johan Ljungberg (29 år)": "IBK Kungälv", "Johan Svensson (30 år)": "IBK Kungälv", "Emil Lundberg (25 år)": "IBK Lidköping", "Liam Eriksson (17 år)": "IBK Lidköping", "David Vik (29 år)": "Mullsjö AIS Utveckling", "Elliot Järn (19 år)": "Mullsjö AIS Utveckling", "Isak Dorell (22 år)": "Mullsjö AIS Utveckling", "Elmer Arne (18 år)": "Pixbo IBF", "Simon Kure (22 år)": "Särö IBK"}, "trace_goalies": ["Martinus Martinsson (21 år)", "Oskar Adler (31 år)", "Helge Wårfors (20 år)", "Erik Christoffersson (22 år)", "Johan Svensson (30 år)", "Johan Ljungberg (29 år)", "Alvin Eckert (18 år)", "Johan Ringqvist (27 år)", "Simon Kure (22 år)", "Elmer Arne (18 år)", "Robin Pagoldh (25 år)", "Liam Eriksson (17 år)", "Oscar Larsson (21 år)", "Kasper Landström (20 år)", "David Vik (29 år)", "Elliot Järn (19 år)", "Phoenix Wigilius (19 år)", "Joel Andersson (18 år)", "Vincent Sohlström (32 år)", "Albin Flöjner (21 år)", "Emil Lundberg (25 år)", "Isak Dorell (22 år)", "Lukas Källström (25 år)", "Kalle Lundgren (25 år)"], "team_options": ["FBC Partille", "Fagerhult Habo IBK", "Floda IBK", "Fristads GoIF", "IBF Backadalen", "IBK Alingsås", "IBK Göteborg", "IBK Kungälv", "IBK Lidköping", "Mullsjö AIS Utveckling", "Pixbo IBF", "Särö IBK"], "dropped_goalies": ["Adrian Moghaddam (17 år)", "Albin Lidefelt (16 år)", "Anton Fogelberg (15 år)", "Hampus Eriksson (21 år)", "Isaac Evans (18 år)", "Kai Fridolf (17 år)", "Lauritz Brunborg (17 år)", "Samuel Löwenmo (17 år)"], "stats": {"total_goalies": 24, "total_teams": 12, "date_range": "2000-01-01 → 2000-03-06", "zero_shot_goalies": 8}}];
+
+      function populateLeagueSelector() {
+        const selector = document.getElementById('league-selector');
+        selector.innerHTML = '';
+        leagues.forEach((league) => {
+          const option = document.createElement('option');
+          option.value = league.key;
+          option.textContent = league.name;
+          selector.appendChild(option);
+        });
       }
-    ];
 
-    const elements = {
-      tableBody: document.getElementById("summary-table-body"),
-      tableEmpty: document.getElementById("table-empty"),
-      teamFilter: document.getElementById("team-filter"),
-      goalieSearch: document.getElementById("goalie-search"),
-      teamsStat: document.getElementById("teams-stat"),
-      goaliesStat: document.getElementById("goalies-stat"),
-      leaderStat: document.getElementById("leader-stat"),
-      shotsStat: document.getElementById("shots-stat"),
-    };
-
-    const state = {
-      sortKey: "final_save_pct",
-      ascending: false,
-      team: "ALL",
-      search: "",
-    };
-
-    function uniqueTeams() {
-      return Array.from(new Set(goalies.map((g) => g.team)));
-    }
-
-    function formatNumber(num) {
-      return Intl.NumberFormat("en-US").format(Math.round(num));
-    }
-
-    function formatPercent(value) {
-      return `${(value * 100).toFixed(1)}%`;
-    }
-
-    function renderFilters() {
-      const options = ["<option value=\"ALL\">All teams</option>", ...uniqueTeams().map((team) => `<option value="${team}">${team}</option>`)];
-      elements.teamFilter.innerHTML = options.join("");
-    }
-
-    function renderStats(data) {
-      const teams = uniqueTeams();
-      const totalShots = data.reduce((sum, row) => sum + (row.total_shots || 0), 0);
-      const leader = data.filter((row) => row.final_save_pct).sort((a, b) => b.final_save_pct - a.final_save_pct)[0];
-
-      elements.teamsStat.textContent = teams.length;
-      elements.goaliesStat.textContent = data.length;
-      elements.leaderStat.textContent = leader ? `${leader.save_pct_display} (${leader.goalie})` : "–";
-      elements.shotsStat.textContent = formatNumber(totalShots);
-    }
-
-    function renderTable(rows) {
-      elements.tableBody.innerHTML = "";
-      if (!rows.length) {
-        elements.tableEmpty.hidden = false;
-        return;
+      function formatNumber(n) {
+        return new Intl.NumberFormat('sv-SE').format(n);
       }
-      elements.tableEmpty.hidden = true;
 
-      const fragment = document.createDocumentFragment();
-      rows.forEach((row) => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${row.team}</td>
-          <td>${row.goalie}</td>
-          <td>${row.games_played}</td>
-          <td>${row.total_shots}</td>
-          <td>${row.total_saves}</td>
-          <td>${row.goals_against}</td>
-          <td>${row.avg_shots_per_game.toFixed(1)}</td>
-          <td>${row.save_pct_display || formatPercent(row.final_save_pct)}</td>
-        `;
-        fragment.appendChild(tr);
-      });
-      elements.tableBody.appendChild(fragment);
-    }
+      function renderStats(league) {
+        const stats = league.stats;
+        const container = document.getElementById('league-stats');
+        container.innerHTML = '';
+        const entries = [
+          ['Goalies', stats.total_goalies],
+          ['Teams', stats.total_teams],
+          ['Date range', stats.date_range],
+          ['Zero-shot goalies', stats.zero_shot_goalies],
+        ];
+        entries.forEach(([label, value]) => {
+          const card = document.createElement('div');
+          card.className = 'stat-card';
+          card.innerHTML = `<div class="stat-label">${label}</div><div class="stat-value">${value}</div>`;
+          container.appendChild(card);
+        });
+      }
 
-    function applyFilters(data) {
-      return data.filter((row) => {
-        const matchesTeam = state.team === "ALL" || row.team === state.team;
-        const matchesSearch = !state.search || row.goalie.toLowerCase().includes(state.search);
-        return matchesTeam && matchesSearch;
-      });
-    }
+      function renderTable(records) {
+        const tbody = document.getElementById('summary-body');
+        tbody.innerHTML = '';
+        records.forEach((row) => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${row.goalie}</td>
+            <td>${row.team ?? ''}</td>
+            <td>${row.games_played}</td>
+            <td>${formatNumber(row.total_shots)}</td>
+            <td>${formatNumber(row.goals_against)}</td>
+            <td>${row.avg_shots_per_game.toFixed(1)}</td>
+            <td>${row.save_pct_display}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
 
-    function sortData(data) {
-      const sorted = [...data].sort((a, b) => {
-        const av = a[state.sortKey];
-        const bv = b[state.sortKey];
-        if (typeof av === "number" && typeof bv === "number") {
-          return state.ascending ? av - bv : bv - av;
+      function renderDropped(list) {
+        const target = document.getElementById('dropped-goalies');
+        if (!list || list.length === 0) {
+          target.textContent = '';
+          return;
         }
-        return state.ascending
-          ? String(av).localeCompare(String(bv))
-          : String(bv).localeCompare(String(av));
-      });
-      return sorted;
-    }
+        target.innerHTML = `<div class="muted">Filtered out (0 shots): ${list.join(', ')}</div>`;
+      }
 
-    function render() {
-      const filtered = applyFilters(goalies);
-      renderStats(goalies);
-      renderTable(sortData(filtered));
-    }
+      function sortBy(key, ascending) {
+        return (a, b) => {
+          const av = a[key];
+          const bv = b[key];
+          if (av === bv) return 0;
+          if (av === null || av === undefined) return 1;
+          if (bv === null || bv === undefined) return -1;
+          const comp = av > bv ? 1 : -1;
+          return ascending ? comp : -comp;
+        };
+      }
 
-    function setupInteractions() {
-      elements.teamFilter.addEventListener("change", () => {
-        state.team = elements.teamFilter.value;
-        render();
-      });
+      function applyFilters(records) {
+        const team = document.getElementById('team-filter').value;
+        const query = document.getElementById('goalie-search').value.trim().toLowerCase();
+        return records.filter((row) => {
+          const matchesTeam = team === 'ALL' || row.team === team;
+          const matchesQuery = !query || row.goalie.toLowerCase().includes(query);
+          return matchesTeam && matchesQuery;
+        });
+      }
 
-      elements.goalieSearch.addEventListener("input", (event) => {
-        state.search = event.target.value.trim().toLowerCase();
-        render();
-      });
+      let summaryData = [];
+      let sortState = { key: 'team', ascending: true };
+      let traceGoalies = [];
 
-      document.getElementById("reset-view").addEventListener("click", () => {
-        state.team = "ALL";
-        state.search = "";
-        state.sortKey = "final_save_pct";
-        state.ascending = false;
-        elements.teamFilter.value = "ALL";
-        elements.goalieSearch.value = "";
-        render();
-      });
+      function restyleChart() {
+        if (traceGoalies.length === 0) return;
+        const team = document.getElementById('team-filter').value;
+        const query = document.getElementById('goalie-search').value.trim().toLowerCase();
+        const visibility = traceGoalies.map((goalie) => {
+          const matchesTeam = team === 'ALL' || (goalie in currentLeague.goalie_to_team && currentLeague.goalie_to_team[goalie] === team);
+          const matchesQuery = !query || goalie.toLowerCase().includes(query);
+          return matchesTeam && matchesQuery;
+        });
+        Plotly.restyle('savepct-chart', { visible: visibility }, Array.from(traceGoalies.keys()));
+      }
 
-      document.querySelectorAll("th.sortable").forEach((th) => {
-        th.addEventListener("click", () => {
-          const key = th.dataset.key;
-          if (state.sortKey === key) {
-            state.ascending = !state.ascending;
-          } else {
-            state.sortKey = key;
-            state.ascending = false;
-          }
-          render();
+      function loadLeague(key) {
+        currentLeague = leagues.find((league) => league.key === key) ?? leagues[0];
+        summaryData = currentLeague.summary_records;
+        traceGoalies = currentLeague.trace_goalies;
+        document.getElementById('active-league-name').textContent = currentLeague.name;
+
+        const teamSelect = document.getElementById('team-filter');
+        teamSelect.innerHTML = '<option value="ALL">All teams</option>' + currentLeague.team_options.map((team) => `<option value="${team}">${team}</option>`).join('');
+
+        const sorted = summaryData.sort(sortBy(sortState.key, sortState.ascending));
+        renderTable(applyFilters(sorted));
+        renderDropped(currentLeague.dropped_goalies);
+        renderStats(currentLeague);
+
+        Plotly.newPlot('savepct-chart', currentLeague.figure.data, currentLeague.figure.layout, { responsive: true });
+        restyleChart();
+      }
+
+      let currentLeague = null;
+
+      window.addEventListener('DOMContentLoaded', () => {
+        populateLeagueSelector();
+        loadLeague(leagues[0].key);
+
+        document.getElementById('league-selector').addEventListener('change', (event) => {
+          loadLeague(event.target.value);
+        });
+
+        document.getElementById('team-filter').addEventListener('change', () => {
+          const filtered = applyFilters(summaryData).sort(sortBy(sortState.key, sortState.ascending));
+          renderTable(filtered);
+          restyleChart();
+        });
+
+        document.getElementById('goalie-search').addEventListener('input', () => {
+          const filtered = applyFilters(summaryData).sort(sortBy(sortState.key, sortState.ascending));
+          renderTable(filtered);
+          restyleChart();
+        });
+
+        document.getElementById('reset-view').addEventListener('click', () => {
+          sortState = { key: 'team', ascending: true };
+          document.getElementById('team-filter').value = 'ALL';
+          document.getElementById('goalie-search').value = '';
+          renderTable(summaryData.sort(sortBy(sortState.key, sortState.ascending)));
+          traceGoalies.forEach((goalie, index) => {
+            Plotly.restyle('savepct-chart', { visible: true }, [index]);
+          });
+        });
+
+        document.querySelectorAll('th.sortable').forEach((th) => {
+          th.addEventListener('click', () => {
+            const key = th.dataset.key;
+            if (sortState.key === key) {
+              sortState.ascending = !sortState.ascending;
+            } else {
+              sortState = { key, ascending: true };
+            }
+            const filtered = applyFilters(summaryData).sort(sortBy(sortState.key, sortState.ascending));
+            renderTable(filtered);
+          });
+        });
+
+        Plotly.newPlot('savepct-chart', leagues[0].figure.data, leagues[0].figure.layout, { responsive: true });
+        Plotly.d3.select('#savepct-chart').on('plotly_doubleclick', () => {
+          document.getElementById('reset-view').click();
         });
       });
-    }
-
-    renderFilters();
-    setupInteractions();
-    render();
-  </script>
-</body>
+      </script>
+    </body>
 </html>
