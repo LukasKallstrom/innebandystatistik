@@ -26,8 +26,8 @@ logger = logging.getLogger(__name__)
 # URLs are hard-coded to satisfy the "no arguments" requirement. Adjust the
 # list below to fetch and display data from other leagues.
 LEAGUE_SOURCES: List[Tuple[str, str]] = [
-    ("Primary league", fetch_data.DEFAULT_FIXTURE_URL),
-    ("Secondary league", fetch_data.ALTERNATE_FIXTURE_URL),
+    ("SSL", fetch_data.DEFAULT_FIXTURE_URL),
+    ("Division 1 Västra", fetch_data.ALTERNATE_FIXTURE_URL),
 ]
 
 DEFAULT_EXCEL_OUTPUT = fetch_data.DEFAULT_OUTPUT
@@ -75,6 +75,7 @@ class LeagueSnapshot:
     name: str
     figure: Dict
     summary_records: List[dict]
+    game_records: List[dict]
     goalie_to_team: Dict[str, str]
     trace_goalies: List[str]
     team_options: List[str]
@@ -93,6 +94,17 @@ def _date_range_text(cumulative: pd.DataFrame) -> str:
     if pd.notna(date_min) and pd.notna(date_max):
         return f"{date_min.date().isoformat()} → {date_max.date().isoformat()}"
     return "–"
+
+
+def _format_time_on_ice(seconds: float | int | None) -> str | None:
+    if seconds is None or pd.isna(seconds):
+        return None
+    try:
+        total = int(seconds)
+    except (ValueError, TypeError):
+        return None
+    minutes, secs = divmod(total, 60)
+    return f"{minutes:02d}:{secs:02d}"
 
 
 def build_figure(cumulative: pd.DataFrame, dropped_goalies: List[str]):
@@ -156,12 +168,90 @@ def build_figure(cumulative: pd.DataFrame, dropped_goalies: List[str]):
     return fig
 
 
+def _build_game_records(cumulative: pd.DataFrame, games: pd.DataFrame) -> List[dict]:
+    games_columns = ["game_id", "date", "home_team", "away_team", "url"]
+    merged = cumulative.merge(
+        games[games_columns],
+        on="game_id",
+        how="left",
+    )
+
+    date_col = None
+    for candidate in ("date", "date_x", "date_y"):
+        if candidate in merged.columns:
+            date_col = candidate
+            break
+    if date_col is None:
+        merged["date"] = pd.NaT
+    else:
+        merged["date"] = merged[date_col]
+
+    merged["date"] = pd.to_datetime(merged["date"])
+    merged["date_iso"] = merged["date"].apply(lambda d: d.date().isoformat() if pd.notna(d) else None)
+
+    merged["saves"] = pd.to_numeric(merged["saves"], errors="coerce")
+    merged["shots_against"] = pd.to_numeric(merged["shots_against"], errors="coerce")
+    merged["goals_against"] = pd.to_numeric(merged["goals_against"], errors="coerce")
+
+    merged["save_pct"] = merged.apply(
+        lambda row: (row["saves"] / row["shots_against"])
+        if pd.notna(row["shots_against"]) and row["shots_against"] > 0 and pd.notna(row["saves"])
+        else pd.NA,
+        axis=1,
+    )
+    merged["save_pct_display"] = merged["save_pct"].apply(
+        lambda value: f"{value:.1%}" if pd.notna(value) else "–"
+    )
+
+    if "time_on_ice_seconds" not in merged:
+        merged["time_on_ice_seconds"] = pd.NA
+    merged["time_on_ice_display"] = merged["time_on_ice_seconds"].apply(_format_time_on_ice)
+
+    def _opponent(row) -> str | None:
+        team = row.get("team")
+        home = row.get("home_team")
+        away = row.get("away_team")
+        if not team or not home or not away:
+            return away or home
+        return away if team == home else home
+
+    merged["opponent"] = merged.apply(_opponent, axis=1)
+
+    records: List[dict] = []
+    for _, row in merged.iterrows():
+        records.append(
+            {
+                "game_id": row["game_id"],
+                "goalie": row.get("goalie"),
+                "team": row.get("team"),
+                "opponent": row.get("opponent"),
+                "home_team": row.get("home_team"),
+                "away_team": row.get("away_team"),
+                "date": row.get("date_iso"),
+                "saves": int(row["saves"]) if pd.notna(row["saves"]) else None,
+                "shots_against": int(row["shots_against"]) if pd.notna(row["shots_against"]) else None,
+                "goals_against": int(row["goals_against"]) if pd.notna(row["goals_against"]) else None,
+                "save_pct": float(row["save_pct"]) if pd.notna(row["save_pct"]) else None,
+                "save_pct_display": row["save_pct_display"]
+                if "save_pct_display" in row and pd.notna(row["save_pct_display"])
+                else (f"{row['save_pct']:.1%}" if pd.notna(row["save_pct"]) else "–"),
+                "time_on_ice_seconds": int(row["time_on_ice_seconds"])
+                if pd.notna(row["time_on_ice_seconds"])
+                else None,
+                "time_on_ice_display": row.get("time_on_ice_display") or "–",
+                "url": row.get("url"),
+            }
+        )
+    return records
+
+
 def _build_league_snapshot(
     name: str,
     figure,
     cumulative: pd.DataFrame,
     summary: pd.DataFrame,
     dropped_goalies: List[str],
+    games: pd.DataFrame,
 ) -> LeagueSnapshot:
     stats = {
         "total_goalies": summary["goalie"].nunique(),
@@ -185,6 +275,7 @@ def _build_league_snapshot(
         name=name,
         figure=figure_json,
         summary_records=summary_records,
+        game_records=_build_game_records(cumulative, games),
         goalie_to_team=goalie_to_team,
         trace_goalies=[trace.name for trace in figure.data],
         team_options=team_options,
@@ -235,7 +326,9 @@ def generate_outputs() -> None:
         figure = build_figure(cumulative, dropped_goalies)
         summary = summarise_goalies(cumulative)
         league_snapshots.append(
-            _build_league_snapshot(name, figure, cumulative, summary, dropped_goalies)
+            _build_league_snapshot(
+                name, figure, cumulative, summary, dropped_goalies, games_df
+            )
         )
 
         if name == LEAGUE_SOURCES[0][0]:

@@ -199,6 +199,46 @@
         font-size: 0.85rem;
       }
 
+      .tab-bar {
+        display: inline-flex;
+        gap: 0.4rem;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        padding: 0.3rem;
+        border-radius: 12px;
+      }
+
+      .tab-btn {
+        background: transparent;
+        border: none;
+        color: rgba(255, 255, 255, 0.8);
+        padding: 0.55rem 0.85rem;
+        border-radius: 10px;
+        cursor: pointer;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+        transition: background 0.2s ease, color 0.2s ease;
+      }
+
+      .tab-btn.active {
+        background: rgba(37, 99, 235, 0.22);
+        color: white;
+        box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.35);
+      }
+
+      .tab-content {
+        display: none;
+        margin-top: 1rem;
+      }
+
+      .tab-content.active {
+        display: block;
+      }
+
+      .table-note {
+        margin: 0 0 0.75rem;
+      }
+
       .muted {
         color: rgba(255, 255, 255, 0.65);
       }
@@ -253,25 +293,57 @@
       </div>
 
       <div class="panel">
-        <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;">
-          <h2 style="margin: 0;">Goalie summary</h2>
-          <div class="tag" id="active-league-name"></div>
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.6rem;">
+          <div>
+            <h2 style="margin: 0;">Goalie details</h2>
+            <p class="muted" style="margin: 0.2rem 0 0;">Switch between the season summary and per-game view.</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+            <div class="tag" id="active-league-name"></div>
+            <div class="tab-bar" role="tablist">
+              <button class="tab-btn active" data-tab="summary-tab" type="button">Summary</button>
+              <button class="tab-btn" data-tab="gamelog-tab" type="button">Game log</button>
+            </div>
+          </div>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th data-key="goalie" class="sortable">Goalie</th>
-              <th data-key="team" class="sortable">Team</th>
-              <th data-key="games_played" class="sortable">Games</th>
-              <th data-key="total_shots" class="sortable">Shots</th>
-              <th data-key="goals_against" class="sortable">GA</th>
-              <th data-key="avg_shots_per_game" class="sortable">Avg shots</th>
-              <th data-key="final_save_pct" class="sortable">Save %</th>
-            </tr>
-          </thead>
-          <tbody id="summary-body"></tbody>
-        </table>
-        <div class="dropped-list" id="dropped-goalies"></div>
+
+        <div id="summary-tab" class="tab-content active" role="tabpanel">
+          <table>
+            <thead>
+              <tr>
+                <th data-key="goalie" class="sortable summary-sort">Goalie</th>
+                <th data-key="team" class="sortable summary-sort">Team</th>
+                <th data-key="games_played" class="sortable summary-sort">Games</th>
+                <th data-key="total_shots" class="sortable summary-sort">Shots</th>
+                <th data-key="goals_against" class="sortable summary-sort">GA</th>
+                <th data-key="avg_shots_per_game" class="sortable summary-sort">Avg shots</th>
+                <th data-key="final_save_pct" class="sortable summary-sort">Save %</th>
+              </tr>
+            </thead>
+            <tbody id="summary-body"></tbody>
+          </table>
+          <div class="dropped-list" id="dropped-goalies"></div>
+        </div>
+
+        <div id="gamelog-tab" class="tab-content" role="tabpanel">
+          <p class="muted table-note">Game-by-game goalie appearances with shots, saves and goals against.</p>
+          <table id="gamelog-table">
+            <thead>
+              <tr>
+                <th data-key="date_value" class="sortable gamelog-sort">Date</th>
+                <th data-key="goalie" class="sortable gamelog-sort">Goalie</th>
+                <th data-key="team" class="sortable gamelog-sort">Team</th>
+                <th data-key="opponent" class="sortable gamelog-sort">Opponent</th>
+                <th>Link</th>
+                <th data-key="shots_against" class="sortable gamelog-sort">Shots</th>
+                <th data-key="goals_against" class="sortable gamelog-sort">GA</th>
+                <th data-key="saves" class="sortable gamelog-sort">Saves</th>
+                <th data-key="save_pct" class="sortable gamelog-sort">Save %</th>
+              </tr>
+            </thead>
+            <tbody id="gamelog-body"></tbody>
+          </table>
+        </div>
       </div>
 
       <footer>
@@ -295,6 +367,29 @@
 
       function formatNumber(n) {
         return new Intl.NumberFormat('sv-SE').format(n);
+      }
+
+      function formatDateLabel(raw) {
+        if (!raw) return '–';
+        const date = new Date(raw);
+        if (!Number.isFinite(date.getTime())) {
+          const text = String(raw);
+          return text.includes('T') ? text.split('T')[0] : text;
+        }
+        return new Intl.DateTimeFormat('sv-SE', { year: 'numeric', month: 'short', day: 'numeric' }).format(date);
+      }
+
+      function formatTimeOnIce(seconds) {
+        if (seconds === null || seconds === undefined) return '–';
+        const total = Number(seconds);
+        if (!Number.isFinite(total) || total < 0) return '–';
+        const mins = Math.floor(total / 60);
+        const secs = Math.round(total % 60);
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+      }
+
+      function formatSavePct(value) {
+        return value === null || value === undefined || Number.isNaN(value) ? '–' : `${(value * 100).toFixed(1)}%`;
       }
 
       function renderStats(league) {
@@ -342,6 +437,118 @@
         target.innerHTML = `<div class="muted">Filtered out (0 shots): ${list.join(', ')}</div>`;
       }
 
+      function renderGameLog(records) {
+        const tbody = document.getElementById('gamelog-body');
+        const numberText = (value) =>
+          value === null || value === undefined || Number.isNaN(value) ? '–' : formatNumber(value);
+        tbody.innerHTML = '';
+        records.forEach((row) => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${row.date_display ?? formatDateLabel(row.date)}</td>
+            <td>${row.goalie ?? ''}</td>
+            <td>${row.team ?? ''}</td>
+            <td>${row.opponent ?? ''}</td>
+            <td>${row.url ? `<a href="${row.url}" target="_blank" rel="noopener">View</a>` : '–'}</td>
+            <td>${numberText(row.shots_against)}</td>
+            <td>${numberText(row.goals_against)}</td>
+            <td>${numberText(row.saves)}</td>
+            <td>${row.save_pct_display ?? formatSavePct(row.save_pct)}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+
+      function applyGameFilters(records) {
+        const team = document.getElementById('team-filter').value;
+        const query = document.getElementById('goalie-search').value.trim().toLowerCase();
+        return records.filter((row) => {
+          const matchesTeam = team === 'ALL' || row.team === team;
+          const matchesQuery = !query || row.goalie?.toLowerCase().includes(query);
+          return matchesTeam && matchesQuery;
+        });
+      }
+
+      function deriveGameRecords(league) {
+        if (league.game_records && league.game_records.length) {
+          return league.game_records;
+        }
+
+        const rows = [];
+        (league.figure?.data ?? []).forEach((trace) => {
+          let prevSaves = 0;
+          let prevShots = 0;
+          const custom = trace.customdata || [];
+          const dates = trace.x || [];
+          custom.forEach((item, idx) => {
+            const [team, gameId, cumulativeSaves, cumulativeShots] = item || [];
+            const nextCumulativeSaves = Number.isFinite(Number(cumulativeSaves)) ? Number(cumulativeSaves) : null;
+            const nextCumulativeShots = Number.isFinite(Number(cumulativeShots)) ? Number(cumulativeShots) : null;
+            const saves = nextCumulativeSaves === null ? null : nextCumulativeSaves - prevSaves;
+            const shots = nextCumulativeShots === null ? null : nextCumulativeShots - prevShots;
+            const goalsAgainst = shots === null || saves === null ? null : shots - saves;
+            if (nextCumulativeSaves !== null) prevSaves = nextCumulativeSaves;
+            if (nextCumulativeShots !== null) prevShots = nextCumulativeShots;
+            const rawDate = dates[idx] ?? null;
+            const dateValue = Date.parse(rawDate);
+            const savePct = shots > 0 && saves !== null ? saves / shots : null;
+            rows.push({
+              game_id: gameId,
+              goalie: trace.name,
+              team: team ?? '',
+              opponent: null,
+              date: rawDate,
+              date_value: Number.isFinite(dateValue) ? dateValue : null,
+              saves: saves,
+              shots_against: shots,
+              goals_against: goalsAgainst,
+              save_pct: savePct,
+              save_pct_display: formatSavePct(savePct),
+              time_on_ice_seconds: null,
+              time_on_ice_display: '–',
+            });
+          });
+        });
+        return rows;
+      }
+
+      function prepareGameRecords(league) {
+        const records = deriveGameRecords(league);
+        return records.map((row) => {
+          const dateValue = row.date_value ?? Date.parse(row.date);
+          const opponent =
+            row.opponent ??
+            (row.team && row.home_team && row.away_team
+              ? row.team === row.home_team
+                ? row.away_team
+                : row.home_team
+              : row.away_team ?? row.home_team ?? '');
+          const shots = Number.isFinite(Number(row.shots_against)) ? Number(row.shots_against) : null;
+          const saves = Number.isFinite(Number(row.saves)) ? Number(row.saves) : null;
+          const savePct = row.save_pct ?? (shots > 0 && saves !== null ? saves / shots : null);
+          return {
+            ...row,
+            opponent,
+            shots_against: shots,
+            saves,
+            save_pct: savePct,
+            save_pct_display: row.save_pct_display ?? formatSavePct(savePct),
+            date_value: Number.isFinite(dateValue) ? dateValue : null,
+            date_display: row.date_display ?? formatDateLabel(row.date),
+            time_on_ice_display: row.time_on_ice_display ?? formatTimeOnIce(row.time_on_ice_seconds),
+          };
+        });
+      }
+
+      function activateTab(tabId) {
+        document.querySelectorAll('.tab-btn').forEach((btn) => {
+          btn.classList.toggle('active', btn.dataset.tab === tabId);
+        });
+        document.querySelectorAll('.tab-content').forEach((panel) => {
+          panel.classList.toggle('active', panel.id === tabId);
+        });
+      }
+
       function sortBy(key, ascending) {
         return (a, b) => {
           const av = a[key];
@@ -365,7 +572,9 @@
       }
 
       let summaryData = [];
+      let gameLogData = [];
       let sortState = { key: 'team', ascending: true };
+      let gameSortState = { key: 'date_value', ascending: false };
       let traceGoalies = [];
 
       function restyleChart() {
@@ -383,6 +592,7 @@
       function loadLeague(key) {
         currentLeague = leagues.find((league) => league.key === key) ?? leagues[0];
         summaryData = currentLeague.summary_records;
+        gameLogData = prepareGameRecords(currentLeague);
         traceGoalies = currentLeague.trace_goalies;
         document.getElementById('active-league-name').textContent = currentLeague.name;
 
@@ -391,11 +601,14 @@
 
         const sorted = summaryData.sort(sortBy(sortState.key, sortState.ascending));
         renderTable(applyFilters(sorted));
+        const sortedGames = applyGameFilters(gameLogData).sort(sortBy(gameSortState.key, gameSortState.ascending));
+        renderGameLog(sortedGames);
         renderDropped(currentLeague.dropped_goalies);
         renderStats(currentLeague);
 
         Plotly.newPlot('savepct-chart', currentLeague.figure.data, currentLeague.figure.layout, { responsive: true });
         restyleChart();
+        activateTab(document.querySelector('.tab-btn.active')?.dataset.tab ?? 'summary-tab');
       }
 
       let currentLeague = null;
@@ -411,26 +624,33 @@
         document.getElementById('team-filter').addEventListener('change', () => {
           const filtered = applyFilters(summaryData).sort(sortBy(sortState.key, sortState.ascending));
           renderTable(filtered);
+          const gameFiltered = applyGameFilters(gameLogData).sort(sortBy(gameSortState.key, gameSortState.ascending));
+          renderGameLog(gameFiltered);
           restyleChart();
         });
 
         document.getElementById('goalie-search').addEventListener('input', () => {
           const filtered = applyFilters(summaryData).sort(sortBy(sortState.key, sortState.ascending));
           renderTable(filtered);
+          const gameFiltered = applyGameFilters(gameLogData).sort(sortBy(gameSortState.key, gameSortState.ascending));
+          renderGameLog(gameFiltered);
           restyleChart();
         });
 
         document.getElementById('reset-view').addEventListener('click', () => {
           sortState = { key: 'team', ascending: true };
+          gameSortState = { key: 'date_value', ascending: false };
           document.getElementById('team-filter').value = 'ALL';
           document.getElementById('goalie-search').value = '';
           renderTable(summaryData.sort(sortBy(sortState.key, sortState.ascending)));
+          renderGameLog(applyGameFilters(gameLogData).sort(sortBy(gameSortState.key, gameSortState.ascending)));
           traceGoalies.forEach((goalie, index) => {
             Plotly.restyle('savepct-chart', { visible: true }, [index]);
           });
+          activateTab('summary-tab');
         });
 
-        document.querySelectorAll('th.sortable').forEach((th) => {
+        document.querySelectorAll('.summary-sort').forEach((th) => {
           th.addEventListener('click', () => {
             const key = th.dataset.key;
             if (sortState.key === key) {
@@ -441,6 +661,23 @@
             const filtered = applyFilters(summaryData).sort(sortBy(sortState.key, sortState.ascending));
             renderTable(filtered);
           });
+        });
+
+        document.querySelectorAll('.gamelog-sort').forEach((th) => {
+          th.addEventListener('click', () => {
+            const key = th.dataset.key;
+            if (gameSortState.key === key) {
+              gameSortState.ascending = !gameSortState.ascending;
+            } else {
+              gameSortState = { key, ascending: key === 'date_value' ? false : true };
+            }
+            const filtered = applyGameFilters(gameLogData).sort(sortBy(gameSortState.key, gameSortState.ascending));
+            renderGameLog(filtered);
+          });
+        });
+
+        document.querySelectorAll('.tab-btn').forEach((btn) => {
+          btn.addEventListener('click', () => activateTab(btn.dataset.tab));
         });
 
         Plotly.newPlot('savepct-chart', leagues[0].figure.data, leagues[0].figure.layout, { responsive: true });

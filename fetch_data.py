@@ -30,7 +30,7 @@ from urllib.parse import urljoin, urlparse
 
 import pandas as pd
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Comment
 
 logger = logging.getLogger(__name__)
 
@@ -609,19 +609,13 @@ def _extract_date_text(doc: BeautifulSoup) -> Optional[str]:
     Some match pages (e.g. statistik.innebandy.se) expose the date inside the
     "Matchinformation" table rather than a dedicated span. A few also embed an
     alternative kickoff time inside an HTML comment near the top of the page.
-    Prefer the visible table value, then fall back to a generic ISO-like date
-    pattern anywhere on the page.
+    Prefer the visible table value, then fall back to a hidden <matchtid> tag
+    in comments, then a generic ISO-like date pattern anywhere on the page.
     """
 
-    date_text = first_text(doc, DATE_SELECTORS)
-    if date_text:
-        return date_text
-
-    # Fallback: inspect the Matchinformation table manually to avoid brittle
-    # CSS selectors when soup-sieve support differs across environments.
+    # 1) Visible match info table (most reliable and includes corrected kickoff)
     match_info = doc.select_one("#iMatchInfo")
     if match_info:
-        # look for a row whose first cell mentions time/date
         for row in match_info.find_all("tr"):
             cells = row.find_all("td")
             if len(cells) < 2:
@@ -630,15 +624,28 @@ def _extract_date_text(doc: BeautifulSoup) -> Optional[str]:
             if any(key in heading for key in ("tid", "date", "spelades")):
                 raw = cells[1].get_text(" ", strip=True)
                 if raw:
-                    return raw
-        # otherwise try a regex inside the table text (avoids picking the
-        # commented-out matchtime at the top of the document)
+                    # Pull the first ISO-like pattern to avoid trailing labels
+                    match = re.search(r"\d{4}-\d{2}-\d{2}(?:\s+\d{2}:\d{2})?", raw)
+                    return match.group(0) if match else raw
         table_text = match_info.get_text(" ", strip=True)
         match = re.search(r"\d{4}-\d{2}-\d{2}(?:\s+\d{2}:\d{2})?", table_text)
         if match:
             return match.group(0)
 
-    # Last resort: grab the first ISO-like date anywhere in the page
+    # 2) Hidden <matchtid> tag embedded in HTML comments near the header
+    for comment in doc.find_all(string=lambda text: isinstance(text, Comment)):
+        match = re.search(
+            r"<matchtid>\s*(\d{4}-\d{2}-\d{2})\s+([0-2]\d:[0-5]\d)", comment
+        )
+        if match:
+            return f"{match.group(1)} {match.group(2)}"
+
+    # 3) Legacy CSS selectors (kept as a fallback)
+    date_text = first_text(doc, DATE_SELECTORS)
+    if date_text:
+        return date_text
+
+    # 4) Last resort: grab the first ISO-like date anywhere in the page
     page_text = doc.get_text(" ", strip=True)
     match = re.search(r"\d{4}-\d{2}-\d{2}(?:\s+\d{2}:\d{2})?", page_text)
     if match:
@@ -950,5 +957,3 @@ def prepare_cumulative_save_percentages(
         m["team"] = m["team"].fillna("Unknown")
 
     return m, dropped_goalies
-
-
