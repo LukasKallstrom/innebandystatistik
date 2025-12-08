@@ -258,6 +258,345 @@ def compute_save_percentage(saves: Optional[int], shots: Optional[int]) -> Optio
     return max(0.0, min(1.0, pct))
 
 
+# -------------------------
+# Goal/shot allocation helpers
+# -------------------------
+
+
+def _parse_shot_totals(doc: BeautifulSoup) -> Optional[Dict[str, List[int]]]:
+    """Return {'home': [...], 'away': [...]} shot counts per period if present."""
+
+    def parse_row_text(text: str) -> Optional[Dict[str, List[int]]]:
+        # Look for all a-b patterns, first pair is total, rest are per period
+        pairs = re.findall(r"(\d+)\s*-\s*(\d+)", text)
+        if not pairs:
+            return None
+        per_period = pairs[1:] if len(pairs) > 1 else []
+        if not per_period:
+            return None
+        home_period = [int(a) for a, _ in per_period]
+        away_period = [int(b) for _, b in per_period]
+        return {"home": home_period, "away": away_period}
+
+    span = doc.find(id=re.compile("Skottstatistik", re.I))
+    if span:
+        parsed = parse_row_text(span.get_text(" ", strip=True))
+        if parsed:
+            return parsed
+
+    # fallback: search for 'Skott' row
+    for row in doc.find_all("tr"):
+        header = row.find(["th", "td"])
+        if not header:
+            continue
+        if "skott" in header.get_text(" ", strip=True).lower():
+            cells = row.find_all("td")
+            text = row.get_text(" ", strip=True)
+            parsed = parse_row_text(text)
+            if parsed:
+                return parsed
+    return None
+
+
+def _normalize_name(name: str) -> str:
+    # drop age suffixes like "(23 år)" and trim
+    cleaned = re.sub(r"\(\d+\s*år\)", "", name, flags=re.I).strip()
+    return cleaned.lower()
+
+
+def _normalize_team(team: Optional[str]) -> Optional[str]:
+    if team is None:
+        return None
+    return re.sub(r"\s+", " ", team).strip()
+
+
+def _allocate_counts(total: int, durations: List[int]) -> List[int]:
+    if total is None:
+        return [0 for _ in durations]
+    if not durations or sum(durations) <= 0 or total <= 0:
+        return [0 for _ in durations]
+    total_duration = sum(durations)
+    raw = [total * d / total_duration for d in durations]
+    ints = [int(x) for x in raw]
+    remainder = total - sum(ints)
+    if remainder > 0:
+        # distribute remainder to largest fractional parts
+        fracs = [(r - i, idx) for idx, (r, i) in enumerate(zip(raw, ints))]
+        fracs.sort(reverse=True)
+        for _, idx in fracs[:remainder]:
+            ints[idx] += 1
+    return ints
+
+
+def _parse_goalie_events(doc: BeautifulSoup, home: Optional[str], away: Optional[str]) -> Dict[str, List[Tuple[str, int]]]:
+    """Return mapping team -> list of (goalie_name, start_seconds)."""
+
+    events_table = doc.select_one("table.clTblMatch")
+    if not events_table:
+        return {}
+
+    period_idx = -1
+    stints: Dict[str, List[Tuple[str, int]]] = {}
+    period_length = 20 * 60
+
+    for row in events_table.find_all("tr"):
+        has_period_marker = "clPeriodStart" in row.get("class", [])
+        if not has_period_marker:
+            # Some pages put the class on the first cell instead of the row.
+            first_cell = row.find(["td", "th"])
+            if first_cell and "clPeriodStart" in first_cell.get("class", []):
+                has_period_marker = True
+        if has_period_marker:
+            period_idx += 1
+            continue
+        cells = row.find_all("td")
+        if len(cells) < 5:
+            continue
+        event_text = cells[0].get_text(" ", strip=True).lower()
+        time_text = cells[1].get_text(" ", strip=True)
+        team_text = _normalize_team(cells[4].get_text(" ", strip=True))
+        player_text = cells[3].get_text(" ", strip=True)
+        if not event_text or "målvakt" not in event_text:
+            continue
+        seconds = time_to_seconds(time_text) or 0
+        start_seconds = max(0, period_idx * period_length + seconds)
+        if team_text:
+            stints.setdefault(team_text, []).append((player_text, start_seconds))
+    return stints
+
+
+def _parse_goal_events(doc: BeautifulSoup) -> List[Tuple[str, int]]:
+    """Return list of (scoring_team, seconds_from_start)."""
+    events_table = doc.select_one("table.clTblMatch")
+    if not events_table:
+        return []
+    period_idx = -1
+    goals: List[Tuple[str, int]] = []
+    period_length = 20 * 60
+    for row in events_table.find_all("tr"):
+        has_period_marker = "clPeriodStart" in row.get("class", [])
+        if not has_period_marker:
+            first_cell = row.find(["td", "th"])
+            if first_cell and "clPeriodStart" in first_cell.get("class", []):
+                has_period_marker = True
+        if has_period_marker:
+            period_idx += 1
+            continue
+        cells = row.find_all("td")
+        if len(cells) < 5:
+            continue
+        event_text = cells[0].get_text(" ", strip=True).lower()
+        if not re.search(r"\bmål\b", event_text):
+            continue
+        time_text = cells[1].get_text(" ", strip=True)
+        team_text = _normalize_team(cells[4].get_text(" ", strip=True))
+        seconds = time_to_seconds(time_text) or 0
+        goals.append((team_text, period_idx * period_length + seconds))
+    return goals
+
+
+def _parse_goal_totals(doc: BeautifulSoup) -> Optional[Dict[str, List[int]]]:
+    """Return {'home': [...], 'away': [...]} goals per period if present."""
+
+    def parse_row_text(text: str) -> Optional[Dict[str, List[int]]]:
+        pairs = re.findall(r"(\d+)\s*-\s*(\d+)", text)
+        if not pairs:
+            return None
+        per_period = pairs[1:] if len(pairs) > 1 else []
+        if not per_period:
+            return None
+        home_period = [int(a) for a, _ in per_period]
+        away_period = [int(b) for _, b in per_period]
+        return {"home": home_period, "away": away_period}
+
+    span = doc.find(id=re.compile("Periodsiffror", re.I))
+    if span:
+        parsed = parse_row_text(span.get_text(" ", strip=True))
+        if parsed:
+            return parsed
+
+    for row in doc.find_all("tr"):
+        header = row.find(["th", "td"])
+        if not header:
+            continue
+        if "periodsiffror" in header.get_text(" ", strip=True).lower():
+            text = row.get_text(" ", strip=True)
+            parsed = parse_row_text(text)
+            if parsed:
+                return parsed
+    return None
+
+
+def _inject_shots_from_events(
+    doc: BeautifulSoup,
+    home: Optional[str],
+    away: Optional[str],
+    game_id: str,
+    appearances: List[Appearance],
+) -> List[Appearance]:
+    """Distribute team shots to goalies using substitution events when per-goalie shots are missing."""
+
+    shot_totals = _parse_shot_totals(doc)
+    if not shot_totals or not home or not away:
+        return appearances
+
+    home = _normalize_team(home)
+    away = _normalize_team(away)
+
+    # Only fall back to allocation for teams where all goalies have zero/None shots, saves, and GA.
+    needs_fallback: Dict[str, bool] = {}
+    for tm in (home, away):
+        team_apps = [app for app in appearances if _normalize_team(app.team_name) == tm]
+        has_data = any(
+            (app.shots_against is not None and app.shots_against != 0)
+            or (app.saves is not None and app.saves != 0)
+            or (app.goals_against is not None and app.goals_against != 0)
+            for app in team_apps
+        )
+        needs_fallback[tm] = not has_data
+
+    if not needs_fallback.get(home, False) and not needs_fallback.get(away, False):
+        return appearances
+
+    goalie_events = _parse_goalie_events(doc, home, away)
+    goal_events = _parse_goal_events(doc)
+    goal_totals = _parse_goal_totals(doc)
+
+    # Build name normalization map
+    team_goalies: Dict[str, List[str]] = {}
+    for app in appearances:
+        if app.team_name:
+            norm = _normalize_team(app.team_name)
+            team_goalies.setdefault(norm or "", []).append(app.goalie_name)
+
+    def pick_display_name(team: str, raw_name: str) -> str:
+        candidates = team_goalies.get(team, [])
+        raw_norm = _normalize_name(raw_name)
+        for cand in candidates:
+            if _normalize_name(cand) == raw_norm or raw_norm in _normalize_name(cand):
+                return cand
+        return raw_name
+
+    period_len = 20 * 60
+    num_periods = max(len(shot_totals["home"]), len(shot_totals["away"]))
+    game_end = num_periods * period_len
+
+    def build_stints(team: str, default_goalie: Optional[str]) -> List[Tuple[str, int, int]]:
+        events = sorted(goalie_events.get(team, []), key=lambda x: x[1])
+        stints: List[Tuple[str, int, int]] = []
+        if not events and default_goalie:
+            events = [(default_goalie, 0)]
+        if not events:
+            return stints
+        for idx, (name, start) in enumerate(events):
+            end = events[idx + 1][1] if idx + 1 < len(events) else game_end
+            stints.append((pick_display_name(team, name), start, end))
+        return stints
+
+    # Identify default starters from earliest appearance per team
+    starters: Dict[str, Optional[str]] = {}
+    for tm in (home, away):
+        goalie_names = [app.goalie_name for app in appearances if _normalize_team(app.team_name) == tm]
+        starters[tm] = goalie_names[0] if goalie_names else None
+
+    stints_by_team = {
+        home: build_stints(home, starters[home]),
+        away: build_stints(away, starters[away]),
+    }
+
+    # Allocate shots per period to stints by time proportion
+    shot_allocation: Dict[str, Dict[str, int]] = {}
+    ga_allocation: Dict[str, Dict[str, int]] = {}
+    for team, periods in (("home", shot_totals["home"]), ("away", shot_totals["away"])):
+        defending_team = away if team == "home" else home
+        if not needs_fallback.get(defending_team, False):
+            continue
+        stints = stints_by_team.get(defending_team, [])
+        if not stints:
+            continue
+        for period_idx, shots in enumerate(periods):
+            if shots is None:
+                continue
+            period_start = period_idx * period_len
+            period_end = period_start + period_len
+            # durations for each stint overlapping this period
+            durations = []
+            stint_refs = []
+            for g, start, end in stints:
+                overlap_start = max(period_start, start)
+                overlap_end = min(period_end, end)
+                duration = max(0, overlap_end - overlap_start)
+                if duration > 0:
+                    durations.append(duration)
+                    stint_refs.append(g)
+            if not durations:
+                continue
+            allocations = _allocate_counts(shots, durations)
+            for goalie_name, shot_count in zip(stint_refs, allocations):
+                if shot_count <= 0:
+                    continue
+                shot_allocation.setdefault(defending_team, {}).setdefault(goalie_name, 0)
+                shot_allocation[defending_team][goalie_name] += shot_count
+            # Allocate goals against from per-period goal totals if goal events are missing
+            if goal_totals:
+                opp_periods = goal_totals["home"] if team == "home" else goal_totals["away"]
+                if period_idx < len(opp_periods):
+                    opp_goals = opp_periods[period_idx]
+                    if opp_goals is not None:
+                        ga_alloc = _allocate_counts(opp_goals, durations)
+                        for goalie_name, ga_count in zip(stint_refs, ga_alloc):
+                            if ga_count <= 0:
+                                continue
+                            ga_allocation.setdefault(defending_team, {}).setdefault(goalie_name, 0)
+                            ga_allocation[defending_team][goalie_name] += ga_count
+
+    # Assign goals against based on goal events
+    ga_by_goalie: Dict[str, Dict[str, int]] = {}
+    for scoring_team, ts in goal_events:
+        defending_team = away if scoring_team == home else home if scoring_team == away else None
+        if not defending_team or not needs_fallback.get(defending_team, False):
+            continue
+        stints = stints_by_team.get(defending_team, [])
+        active_goalie = None
+        for name, start, end in stints:
+            if start <= ts < end:
+                active_goalie = name
+                break
+        if active_goalie:
+            ga_by_goalie.setdefault(defending_team, {}).setdefault(active_goalie, 0)
+            ga_by_goalie[defending_team][active_goalie] += 1
+
+    # Build aggregated appearance data
+    updated: Dict[Tuple[str, str], Appearance] = {}
+    for app in appearances:
+        key = (app.team_name or "", app.goalie_name)
+        updated[key] = app
+
+    for team, goalies in shot_allocation.items():
+        for goalie_name, shots in goalies.items():
+            ga = ga_by_goalie.get(team, {}).get(goalie_name)
+            if ga is None:
+                ga = ga_allocation.get(team, {}).get(goalie_name, 0)
+            saves = shots - ga if shots is not None and ga is not None else None
+            toi = 0
+            for name, start, end in stints_by_team.get(team, []):
+                if name == goalie_name:
+                    toi += max(0, end - start)
+            key = (team, goalie_name)
+            updated[key] = Appearance(
+                game_id=game_id,
+                goalie_name=goalie_name,
+                team_name=team,
+                saves=saves,
+                shots_against=shots,
+                goals_against=ga,
+                save_pct=compute_save_percentage(saves, shots),
+                time_on_ice_seconds=toi if toi else None,
+            )
+
+    return list(updated.values())
+
+
 # ---------- STRICT explicit "Målvakter" tables (avoid Pos. tables)
 
 def extract_goalie_tables(doc: BeautifulSoup) -> List[BeautifulSoup]:
@@ -690,6 +1029,8 @@ def parse_game(doc: BeautifulSoup, url: str) -> tuple[Game, List[Appearance]]:
             if home or away:
                 team_hint = home if idx == 0 else away
             appearances.extend(parse_goalies_from_player_table(table, game_id, team_hint))
+
+    appearances = _inject_shots_from_events(doc, home, away, game_id, appearances)
 
     return game, appearances
 
