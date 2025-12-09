@@ -1,8 +1,17 @@
 # test_main.py
 from datetime import datetime
+
+import pandas as pd
 from bs4 import BeautifulSoup
 
-from fetch_data import parse_game, Appearance
+from fetch_data import (
+    Appearance,
+    _extract_date_text,
+    _inject_shots_from_events,
+    parse_game,
+    parse_game_id,
+    prepare_cumulative_save_percentages,
+)
 
 
 def _soup(html: str) -> BeautifulSoup:
@@ -193,3 +202,131 @@ def test_matchinformation_date_beats_comment_block():
 
     assert isinstance(game.date, datetime)
     assert game.date == datetime(2025, 9, 20, 14, 0)
+
+
+def test_matchtid_comment_used_when_no_visible_date():
+    """Hidden <matchtid> in HTML comments should be respected when tables are missing."""
+    html = """
+    <html><body>
+      <!-- <matchtid>2024-02-10 18:30</matchtid> -->
+      <div>Ingen tabell här</div>
+    </body></html>
+    """
+
+    doc = _soup(html)
+    assert _extract_date_text(doc) == "2024-02-10 18:30"
+
+    game, apps = parse_game(doc, url="http://example.test/game?GameID=XYZ-789")
+    assert game.date == datetime(2024, 2, 10, 18, 30)
+    assert parse_game_id(game.url) == "XYZ-789"
+    assert apps == []
+
+
+def test_event_driven_allocation_distributes_shots_and_goals():
+    """Shots/goals should be allocated to goalies based on substitution timeline."""
+    html = """
+    <html><body>
+      <span id="Skottstatistik">Skottstatistik: 18 - 15 (9 - 5, 6 - 7, 3 - 3)</span>
+      <table class="clTblMatch">
+        <tr class="clPeriodStart"><td>Period 1</td></tr>
+        <tr><td>Målvaktsbyte</td><td>00:00</td><td></td><td>Goalie A</td><td>Team Away</td></tr>
+        <tr><td>Mål</td><td>10:00</td><td></td><td>Forward</td><td>Team Home</td></tr>
+        <tr class="clPeriodStart"><td>Period 2</td></tr>
+        <tr><td>Mål</td><td>00:40</td><td></td><td>Forward</td><td>Team Home</td></tr>
+        <tr><td>Målvaktsbyte</td><td>05:00</td><td></td><td>Goalie B</td><td>Team Away</td></tr>
+        <tr class="clPeriodStart"><td>Period 3</td></tr>
+        <tr><td>Mål</td><td>05:00</td><td></td><td>Forward</td><td>Team Home</td></tr>
+      </table>
+    </body></html>
+    """
+    doc = _soup(html)
+    appearances = [
+        Appearance(
+            game_id="match1",
+            goalie_name="Home Goalie",
+            team_name="Team Home",
+            saves=15,
+            shots_against=18,
+            goals_against=3,
+            save_pct=0.83,
+            time_on_ice_seconds=3600,
+        ),
+        Appearance(
+            game_id="match1",
+            goalie_name="Goalie A",
+            team_name="Team Away",
+            saves=None,
+            shots_against=None,
+            goals_against=None,
+            save_pct=None,
+            time_on_ice_seconds=None,
+        ),
+        Appearance(
+            game_id="match1",
+            goalie_name="Goalie B",
+            team_name="Team Away",
+            saves=None,
+            shots_against=None,
+            goals_against=None,
+            save_pct=None,
+            time_on_ice_seconds=None,
+        ),
+    ]
+
+    updated = _inject_shots_from_events(
+        doc, home="Team Home", away="Team Away", game_id="match1", appearances=appearances
+    )
+
+    goalie_a = next(app for app in updated if app.goalie_name == "Goalie A")
+    goalie_b = next(app for app in updated if app.goalie_name == "Goalie B")
+
+    assert goalie_a.shots_against == 10
+    assert goalie_a.goals_against == 2
+    assert goalie_a.saves == 8
+    assert abs(goalie_a.save_pct - 0.8) < 1e-9
+    assert goalie_a.time_on_ice_seconds == 1500  # 25 minutes
+
+    assert goalie_b.shots_against == 8
+    assert goalie_b.goals_against == 1
+    assert goalie_b.saves == 7
+    assert abs(goalie_b.save_pct - 7 / 8) < 1e-9
+    assert goalie_b.time_on_ice_seconds == 2100  # 35 minutes
+
+
+def test_prepare_cumulative_rebuilds_missing_counts_and_filters_zero_shots():
+    games = pd.DataFrame(
+        [
+            {"game_id": "g1", "url": "u1", "date": datetime(2024, 1, 1), "home_team": "A", "away_team": "B"},
+            {"game_id": "g2", "url": "u2", "date": pd.NaT, "home_team": "A", "away_team": "B"},
+        ]
+    )
+    appearances = pd.DataFrame(
+        [
+            {"game_id": "g1", "goalie": "Goalie A", "team": "A", "saves": 28, "shots_against": pd.NA, "goals_against": 2, "save_pct": pd.NA},
+            {"game_id": "g2", "goalie": "Goalie A", "team": "A", "saves": pd.NA, "shots_against": 25, "goals_against": 1, "save_pct": pd.NA},
+            {"game_id": "g1", "goalie": "Goalie B", "team": "B", "saves": 0, "shots_against": 0, "goals_against": 0, "save_pct": 0},
+        ]
+    )
+
+    cumulative, dropped = prepare_cumulative_save_percentages(games, appearances)
+
+    assert dropped == ["Goalie B"]
+    assert list(cumulative["goalie"].unique()) == ["Goalie A"]
+    assert len(cumulative) == 2
+
+    # Synthetic date for g2 should be earlier than real date for g1
+    assert cumulative.iloc[0]["game_id"] == "g2"
+    assert cumulative.iloc[1]["game_id"] == "g1"
+    assert cumulative.iloc[0]["date"] < cumulative.iloc[1]["date"]
+
+    # Reconstructed counts and cumulative percentages
+    row_g2 = cumulative[cumulative["game_id"] == "g2"].iloc[0]
+    row_g1 = cumulative[cumulative["game_id"] == "g1"].iloc[0]
+
+    assert row_g2["shots_against"] == 25
+    assert row_g2["saves"] == 24
+    assert abs(row_g2["cumulative_save_pct"] - 0.96) < 1e-9
+
+    assert row_g1["shots_against"] == 30  # 28 + 2
+    assert row_g1["saves"] == 28
+    assert abs(row_g1["cumulative_save_pct"] - (52 / 55)) < 1e-9
