@@ -44,7 +44,10 @@ DEFAULT_FIXTURE_URL = (
 ALTERNATE_FIXTURE_URL = (
     "http://statistik.innebandy.se/ft.aspx?scr=fixturelist&ftid=40701"
 )
-PRECONFIGURED_FIXTURE_URLS = [DEFAULT_FIXTURE_URL, ALTERNATE_FIXTURE_URL]
+THIRD_FIXTURE_URL = (
+    "http://statistik.innebandy.se/ft.aspx?scr=fixturelist&ftid=40694"
+)
+PRECONFIGURED_FIXTURE_URLS = [DEFAULT_FIXTURE_URL, ALTERNATE_FIXTURE_URL, THIRD_FIXTURE_URL]
 DEFAULT_OUTPUT = Path("goalie_stats.xlsx")
 DEFAULT_PLOT = Path("goalie_savepct_timeline.png")
 

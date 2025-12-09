@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 LEAGUE_SOURCES: List[Tuple[str, str]] = [
     ("SSL", fetch_data.DEFAULT_FIXTURE_URL),
     ("Division 1 Västra", fetch_data.ALTERNATE_FIXTURE_URL),
+    ("Allsvenskan", fetch_data.THIRD_FIXTURE_URL),
 ]
 
 DEFAULT_EXCEL_OUTPUT = fetch_data.DEFAULT_OUTPUT
