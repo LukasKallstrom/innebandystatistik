@@ -1137,26 +1137,43 @@ def _write_debug_csv(dirpath: Path, games_df: pd.DataFrame, apps_df: pd.DataFram
     apps_df.to_csv(dirpath / f"appearances_{tag}.csv", index=False)
 
 
-def scrape_data(season_url: str, debug_csv_dir: Path | None = None) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def scrape_data(
+    season_url: str, debug_csv_dir: Path | None = None, league_name: str | None = None
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Scrape *season_url* and return dataframes for games and goalie appearances."""
 
+    league_label = league_name or season_url
     session = build_session()
-    logger.info("Fetching fixture list: %s", season_url)
+    logger.info("Fetching fixture list: %s (league=%s)", season_url, league_label)
     fixture_doc = fetch_html(session, season_url)
     game_links = sorted(set(iter_game_links(fixture_doc, season_url)))
-    logger.info("Discovered %d unique games", len(game_links))
+    logger.info("Discovered %d unique games for %s", len(game_links), league_label)
 
     games: List[Game] = []
     appearances: List[Appearance] = []
 
     for index, url in enumerate(game_links, start=1):
-        logger.debug("Fetching game %d/%d: %s", index, len(game_links), url)
+        logger.info(
+            "Fetching game %d/%d (%s): %s", index, len(game_links), league_label, url
+        )
         try:
             game_doc = fetch_html(session, url)
         except requests.RequestException as exc:  # pragma: no cover - network failure
             logger.warning("Failed to fetch %s: %s", url, exc)
             continue
         game, game_apps = parse_game(game_doc, url)
+        game_date = game.date.date().isoformat() if game.date else "unknown date"
+        home = game.home_team or "Unknown home team"
+        away = game.away_team or "Unknown away team"
+        logger.info(
+            "Fetched game %d/%d (%s): %s vs %s on %s",
+            index,
+            len(game_links),
+            league_label,
+            home,
+            away,
+            game_date,
+        )
         games.append(game)
         appearances.extend(game_apps)
         if not game_apps:

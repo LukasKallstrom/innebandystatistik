@@ -320,7 +320,7 @@ def generate_outputs() -> None:
     league_snapshots: List[LeagueSnapshot] = []
     for name, url in LEAGUE_SOURCES:
         logger.info("Fetching league '%s' from %s", name, url)
-        games_df, appearances_df = fetch_data.scrape_data(url)
+        games_df, appearances_df = fetch_data.scrape_data(url, league_name=name)
         cumulative, dropped_goalies = fetch_data.prepare_cumulative_save_percentages(
             games_df, appearances_df
         )
